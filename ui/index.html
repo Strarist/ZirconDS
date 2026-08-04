@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Property scrape verification</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f3efe6;
+      --ink: #1c2420;
+      --muted: #5c6a63;
+      --line: #c9d5ce;
+      --panel: rgba(255, 252, 246, 0.92);
+      --accent: #0f6b4c;
+      --accent-soft: #d8eee4;
+      --warn: #8a4b12;
+      --danger: #9b2c2c;
+      --ok: #0f6b4c;
+      --new: #2a6f8f;
+      --new-soft: #dcecf3;
+      --shadow: 0 14px 32px rgba(28, 36, 32, 0.08);
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "DM Sans", sans-serif;
+      background:
+        radial-gradient(circle at top left, #dff0e7 0%, transparent 42%),
+        radial-gradient(circle at top right, #f7e7d4 0%, transparent 38%),
+        linear-gradient(180deg, #f7f3ea 0%, var(--bg) 55%, #eaf2ed 100%);
+      min-height: 100vh;
+    }
+
+    .wrap {
+      width: min(1180px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 1.5rem 0 4rem;
+    }
+
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1.25rem;
+      margin-bottom: 1rem;
+    }
+
+    .header-copy { display: grid; gap: 0.45rem; min-width: 0; }
+
+    .header-copy h1 {
+      margin: 0;
+      font-family: Fraunces, Georgia, serif;
+      font-size: clamp(1.7rem, 3vw, 2.4rem);
+      letter-spacing: -0.03em;
+    }
+
+    .header-copy p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 40rem;
+      line-height: 1.5;
+      font-size: 0.95rem;
+    }
+
+    .header-actions {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.45rem;
+      flex-shrink: 0;
+    }
+
+    button.scrape-btn {
+      appearance: none;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.7rem 1.15rem;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      font: inherit;
+      font-weight: 700;
+      font-size: 0.92rem;
+      box-shadow: var(--shadow);
+      white-space: nowrap;
+    }
+
+    button.scrape-btn:hover:not(:disabled) { filter: brightness(1.05); }
+    button.scrape-btn:disabled { opacity: 0.72; cursor: not-allowed; }
+    button.scrape-btn.running { background: #315f4c; }
+
+    .freshness {
+      color: var(--muted);
+      font-size: 0.8rem;
+      text-align: right;
+      max-width: 16rem;
+      line-height: 1.35;
+    }
+
+    .view-toggle {
+      display: inline-flex;
+      padding: 0.25rem;
+      gap: 0.2rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 252, 246, 0.9);
+      margin-bottom: 1rem;
+      box-shadow: var(--shadow);
+    }
+
+    .view-toggle button {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-weight: 600;
+      font-size: 0.88rem;
+      padding: 0.5rem 1rem;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .view-toggle button.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .view-toggle button .count {
+      opacity: 0.85;
+      font-weight: 500;
+      margin-left: 0.25rem;
+    }
+
+    .banner {
+      display: none;
+      margin-bottom: 1rem;
+      padding: 0.85rem 1rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .banner.visible { display: grid; gap: 0.55rem; }
+    .banner.running { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+    .banner.ok { border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); }
+    .banner.error { border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); }
+
+    .banner-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      font-weight: 600;
+      font-size: 0.92rem;
+    }
+
+    .banner pre {
+      margin: 0;
+      max-height: 9rem;
+      overflow: auto;
+      padding: 0.65rem 0.75rem;
+      border-radius: 12px;
+      background: #1c2420;
+      color: #dce8e1;
+      font-size: 0.75rem;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .toast {
+      position: fixed;
+      right: 1rem;
+      bottom: 1rem;
+      z-index: 20;
+      display: none;
+      padding: 0.75rem 1rem;
+      border-radius: 12px;
+      background: var(--ink);
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.9rem;
+      box-shadow: var(--shadow);
+    }
+
+    .toast.visible { display: block; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.75rem;
+      margin: 0 0 1rem;
+    }
+
+    .stat {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 0.9rem 1rem;
+      box-shadow: var(--shadow);
+    }
+
+    .stat .label { color: var(--muted); font-size: 0.8rem; margin-bottom: 0.3rem; }
+    .stat .value {
+      font-family: Fraunces, Georgia, serif;
+      font-size: 1.45rem;
+      font-weight: 700;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr;
+      gap: 0.65rem;
+      margin-bottom: 0.85rem;
+      position: sticky;
+      top: 0.65rem;
+      z-index: 5;
+      padding: 0.8rem;
+      background: rgba(247, 243, 234, 0.94);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    input, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.7rem 0.8rem;
+      font: inherit;
+      background: #fffdf8;
+      color: var(--ink);
+    }
+
+    input:focus, select:focus {
+      outline: 2px solid color-mix(in srgb, var(--accent) 35%, white);
+      border-color: var(--accent);
+    }
+
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: baseline;
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 0.85rem;
+    }
+
+    .list { display: grid; gap: 0.75rem; }
+    .list.latest-mode details.card {
+      border-color: color-mix(in srgb, var(--new) 28%, var(--line));
+      box-shadow: 0 14px 28px rgba(42, 111, 143, 0.08);
+    }
+
+    details.card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    details.card.is-new {
+      border-color: color-mix(in srgb, var(--new) 35%, var(--line));
+    }
+
+    summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 0.95rem 1.05rem;
+      display: grid;
+      gap: 0.55rem;
+    }
+
+    summary::-webkit-details-marker { display: none; }
+
+    .title-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: start;
+    }
+
+    .title-row h2 {
+      margin: 0;
+      font-size: 1.02rem;
+      line-height: 1.35;
+      font-weight: 600;
+    }
+
+    .price { white-space: nowrap; font-weight: 700; color: var(--accent); }
+    .muted-price { color: var(--muted); font-weight: 600; font-size: 0.92rem; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.26rem 0.5rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 0.76rem;
+      font-weight: 600;
+    }
+
+    .chip.muted { background: #efe9dc; color: var(--muted); }
+    .chip.new {
+      background: var(--new-soft);
+      color: var(--new);
+    }
+    .chip.site {
+      background: #e8e4f2;
+      color: #4a3f6b;
+    }
+
+    .summary-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+
+    .select-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.65rem;
+      margin-bottom: 0.85rem;
+      padding: 0.65rem 0.85rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .select-bar label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .select-bar .sel-count { color: var(--muted); font-size: 0.85rem; margin-right: auto; }
+
+    .card-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      margin-right: 0.35rem;
+    }
+
+    .card-check input { width: auto; accent-color: var(--accent); }
+
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      background: rgba(28, 36, 32, 0.45);
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      width: min(720px, 100%);
+      max-height: min(85vh, 900px);
+      display: flex;
+      flex-direction: column;
+      background: #fffdf8;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      box-shadow: 0 24px 48px rgba(28, 36, 32, 0.18);
+      overflow: hidden;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem 1.15rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 1.25rem;
+    }
+
+    .modal-body {
+      padding: 0.85rem 1.15rem;
+      overflow: auto;
+      flex: 1;
+    }
+
+    .modal-body pre {
+      margin: 0;
+      padding: 0.85rem;
+      border-radius: 12px;
+      background: #1c2420;
+      color: #dce8e1;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 50vh;
+      overflow: auto;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      padding: 0.85rem 1.15rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .banner-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 0.85rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .banner-stats strong { color: var(--ink); font-weight: 700; }
+
+    .body {
+      border-top: 1px solid var(--line);
+      padding: 1rem 1.05rem 1.15rem;
+      display: grid;
+      gap: 0.85rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.7rem;
+    }
+
+    .field .k { color: var(--muted); font-size: 0.76rem; margin-bottom: 0.18rem; }
+    .field .v { font-size: 0.92rem; word-break: break-word; }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+    a.button, button.linkish {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.48rem 0.85rem;
+      border-radius: 999px;
+      background: var(--accent);
+      color: white;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.86rem;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    a.button.secondary, button.linkish.secondary {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid color-mix(in srgb, var(--accent) 40%, white);
+    }
+
+    a.button.compact { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
+
+    .empty, .error, .loading {
+      padding: 2rem;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,252,246,0.7);
+    }
+
+    .error { color: var(--warn); }
+    ul.compact { margin: 0; padding-left: 1.1rem; }
+
+    @media (max-width: 1100px) {
+      .controls { grid-template-columns: 1.5fr 1fr 1fr 1fr; }
+    }
+
+    @media (max-width: 900px) {
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .controls { grid-template-columns: 1fr 1fr; }
+      .grid { grid-template-columns: 1fr 1fr; }
+      .header-row { flex-direction: column; }
+      .header-actions { align-items: stretch; width: 100%; }
+      button.scrape-btn { width: 100%; }
+      .freshness { text-align: left; max-width: none; }
+    }
+
+    @media (max-width: 640px) {
+      .controls { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: 1fr; }
+      .title-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header-row">
+      <div class="header-copy">
+        <h1>Scrape verification</h1>
+        <p>Archive grows across scrapes. Switch to Latest to review only newly added units from the last run.</p>
+      </div>
+      <div class="header-actions">
+        <button type="button" class="scrape-btn" id="scrapeBtn">Run scrape</button>
+        <div class="freshness" id="freshness">Data: —</div>
+      </div>
+    </div>
+
+    <div class="view-toggle" role="tablist" aria-label="Dataset">
+      <button type="button" class="active" data-view="all" id="viewAll">All saved <span class="count" id="countAll"></span></button>
+      <button type="button" data-view="latest" id="viewLatest">Latest run <span class="count" id="countLatest"></span></button>
+    </div>
+
+    <div class="banner" id="scrapeBanner" aria-live="polite">
+      <div class="banner-title">
+        <span id="bannerMessage">Scrape status</span>
+        <span id="bannerElapsed"></span>
+      </div>
+      <div class="banner-stats" id="bannerStats"></div>
+      <pre id="bannerLog"></pre>
+    </div>
+
+    <div class="stats" id="stats">
+      <div class="stat"><div class="label">Records</div><div class="value" id="statRecords">—</div></div>
+      <div class="stat"><div class="label">Projects</div><div class="value" id="statProjects">—</div></div>
+      <div class="stat"><div class="label">Residential-like</div><div class="value" id="statResidential">—</div></div>
+      <div class="stat"><div class="label">Commercial</div><div class="value" id="statCommercial">—</div></div>
+    </div>
+
+    <div class="controls">
+      <input id="search" type="search" placeholder="Search: multi-word match across project, city, RERA…" />
+      <select id="typeFilter"><option value="">All types</option></select>
+      <select id="cityFilter"><option value="">All cities</option></select>
+      <select id="possessionFilter"><option value="">All possession</option></select>
+      <select id="priceFilter">
+        <option value="">All prices</option>
+        <option value="priced">Has price</option>
+        <option value="call">Call for price</option>
+      </select>
+      <select id="sortBy">
+        <option value="project">Sort: Project</option>
+        <option value="bhk">Sort: BHK</option>
+        <option value="area">Sort: Area</option>
+        <option value="price">Sort: Price</option>
+      </select>
+    </div>
+
+    <div class="meta-row">
+      <div id="resultCount">Loading…</div>
+      <div id="dataHint"></div>
+    </div>
+
+    <div class="select-bar" id="selectBar">
+      <label><input type="checkbox" id="selectAll" /> Select all (filtered)</label>
+      <span class="sel-count" id="selCount">0 selected</span>
+      <button type="button" class="linkish" id="exportBtn">Export selected</button>
+      <button type="button" class="linkish secondary" id="clearSelBtn">Clear</button>
+    </div>
+
+    <div class="list" id="list">
+      <div class="loading">Loading properties…</div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="exportModal" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="exportTitle">0 properties selected</h2>
+        <button type="button" class="linkish secondary" id="exportClose">Close</button>
+      </div>
+      <div class="modal-body">
+        <pre id="exportJson"></pre>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="linkish" id="exportCopy">Copy to clipboard</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script>
+    const COMMERCIAL_HINTS = ["commercial", "office", "shop", "retail", "sco"];
+    const SEARCH_FIELDS = [
+      "title", "projectName", "developer", "city", "locality", "slug",
+      "reraNumber", "address", "propertyType", "h1", "seoTitle",
+    ];
+    const POLL_MS = 1500;
+
+    const state = {
+      view: "all",
+      archive: [],
+      latest: [],
+      records: [],
+      filtered: [],
+      selected: new Set(),
+      latestScrapedAt: null,
+      archiveCount: 0,
+      latestCount: 0,
+      scrapeState: "idle",
+      pollTimer: null,
+      lastFinishedKey: null,
+      lastRun: null,
+    };
+
+    function recordKey(r) {
+      if (r && r.slug) return `slug:${r.slug}`;
+      const src = (r && r.sourceUrl) || "";
+      return `src:${src}|${r && r.bhk}|${r && r.superBuiltUpArea}`;
+    }
+
+    function siteLabels(r) {
+      const labels = [];
+      if (r.sourceSite) labels.push(String(r.sourceSite));
+      for (const s of r.sources || []) {
+        if (s && s.site && !labels.includes(s.site)) labels.push(String(s.site));
+      }
+      return labels;
+    }
+
+    function updateSelCount() {
+      const n = state.selected.size;
+      document.getElementById("selCount").textContent = `${n} selected`;
+      const allBox = document.getElementById("selectAll");
+      const keys = state.filtered.map(recordKey);
+      const allOn = keys.length > 0 && keys.every((k) => state.selected.has(k));
+      allBox.checked = allOn;
+      allBox.indeterminate = n > 0 && !allOn;
+    }
+
+    function money(value) {
+      if (value == null || value === "") return "Call for price";
+      const n = Number(value);
+      if (!Number.isFinite(n)) return String(value);
+      return new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: "INR",
+        maximumFractionDigits: 0,
+      }).format(n);
+    }
+
+    function areaLabel(value) {
+      if (value == null || value === "") return "—";
+      return `${value} sqft`;
+    }
+
+    function text(value) {
+      if (value == null || value === "") return "—";
+      return String(value);
+    }
+
+    function boolLabel(value) {
+      if (value === true) return "yes";
+      if (value === false) return "no";
+      return "—";
+    }
+
+    function isCommercial(type) {
+      const lower = String(type || "").toLowerCase();
+      return COMMERCIAL_HINTS.some((hint) => lower.includes(hint));
+    }
+
+    function isNewRecord(r) {
+      return Boolean(state.latestScrapedAt && r.scrapedAt === state.latestScrapedAt);
+    }
+
+    function uniqueSorted(values) {
+      return [...new Set(values.filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value).replaceAll("'", "&#39;");
+    }
+
+    function showToast(message) {
+      const el = document.getElementById("toast");
+      el.textContent = message;
+      el.classList.add("visible");
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => el.classList.remove("visible"), 3200);
+    }
+
+    function fillSelect(select, values, allLabel) {
+      const current = select.value;
+      select.innerHTML = "";
+      const all = document.createElement("option");
+      all.value = "";
+      all.textContent = allLabel;
+      select.appendChild(all);
+      for (const value of values) {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = value;
+        select.appendChild(opt);
+      }
+      if ([...select.options].some((o) => o.value === current)) select.value = current;
+    }
+
+    function updateStats(records) {
+      const projects = new Set(records.map((r) => r.projectName).filter(Boolean));
+      const commercial = records.filter((r) => isCommercial(r.propertyType)).length;
+      document.getElementById("statRecords").textContent = String(records.length);
+      document.getElementById("statProjects").textContent = String(projects.size);
+      document.getElementById("statResidential").textContent = String(records.length - commercial);
+      document.getElementById("statCommercial").textContent = String(commercial);
+    }
+
+    function formatMtime(iso) {
+      if (!iso) return "not found";
+      try { return new Date(iso).toLocaleString(); } catch { return iso; }
+    }
+
+    function matchesSearch(record, query) {
+      const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      if (!tokens.length) return true;
+      const hay = SEARCH_FIELDS.map((k) => String(record[k] || "").toLowerCase()).join(" ");
+      return tokens.every((token) => hay.includes(token));
+    }
+
+    async function refreshMeta() {
+      try {
+        const res = await fetch("/api/meta", { cache: "no-store" });
+        if (!res.ok) return;
+        const meta = await res.json();
+        state.archiveCount = meta.archiveCount || 0;
+        state.latestCount = meta.latestCount || 0;
+        state.latestScrapedAt = meta.latestScrapedAt || state.latestScrapedAt;
+        document.getElementById("countAll").textContent = `(${state.archiveCount})`;
+        document.getElementById("countLatest").textContent = `(${state.latestCount})`;
+        document.getElementById("freshness").textContent =
+          `Archive ${state.archiveCount} · Latest ${state.latestCount}\nUpdated ${formatMtime(meta.mtimeIso)}`;
+        if (meta.lastRun) state.lastRun = meta.lastRun;
+        if (meta.scrape) updateBanner(meta.scrape);
+      } catch { /* ignore */ }
+    }
+
+    function sortRecords(rows) {
+      const sortBy = document.getElementById("sortBy").value;
+      const sorted = [...rows];
+      sorted.sort((a, b) => {
+        if (sortBy === "bhk") {
+          const av = a.bhk == null ? Number.POSITIVE_INFINITY : Number(a.bhk);
+          const bv = b.bhk == null ? Number.POSITIVE_INFINITY : Number(b.bhk);
+          if (av !== bv) return av - bv;
+        } else if (sortBy === "area") {
+          const av = a.superBuiltUpArea == null ? Number.POSITIVE_INFINITY : Number(a.superBuiltUpArea);
+          const bv = b.superBuiltUpArea == null ? Number.POSITIVE_INFINITY : Number(b.superBuiltUpArea);
+          if (av !== bv) return av - bv;
+        } else if (sortBy === "price") {
+          const av = a.price == null ? Number.POSITIVE_INFINITY : Number(a.price);
+          const bv = b.price == null ? Number.POSITIVE_INFINITY : Number(b.price);
+          if (av !== bv) return av - bv;
+        }
+        const ap = String(a.projectName || "");
+        const bp = String(b.projectName || "");
+        if (ap !== bp) return ap.localeCompare(bp);
+        return String(a.slug || "").localeCompare(String(b.slug || ""));
+      });
+      return sorted;
+    }
+
+    function applyFilters() {
+      const q = document.getElementById("search").value;
+      const type = document.getElementById("typeFilter").value;
+      const city = document.getElementById("cityFilter").value;
+      const possession = document.getElementById("possessionFilter").value;
+      const priceMode = document.getElementById("priceFilter").value;
+
+      let rows = state.records.filter((r) => {
+        if (type && r.propertyType !== type) return false;
+        if (city && r.city !== city) return false;
+        if (possession && r.possessionStatus !== possession) return false;
+        if (priceMode === "priced" && (r.price == null || r.price === "")) return false;
+        if (priceMode === "call" && !(r.price == null || r.price === "")) return false;
+        return matchesSearch(r, q);
+      });
+
+      state.filtered = sortRecords(rows);
+      document.getElementById("resultCount").textContent =
+        `${state.filtered.length} of ${state.records.length} records`;
+      updateSelCount();
+      renderList();
+    }
+
+    function setView(view) {
+      state.view = view;
+      state.selected.clear();
+      document.getElementById("viewAll").classList.toggle("active", view === "all");
+      document.getElementById("viewLatest").classList.toggle("active", view === "latest");
+      document.getElementById("list").classList.toggle("latest-mode", view === "latest");
+      state.records = view === "latest" ? state.latest : state.archive;
+      updateStats(state.records);
+      fillSelect(document.getElementById("typeFilter"), uniqueSorted(state.records.map((r) => r.propertyType)), "All types");
+      fillSelect(document.getElementById("cityFilter"), uniqueSorted(state.records.map((r) => r.city)), "All cities");
+      fillSelect(document.getElementById("possessionFilter"), uniqueSorted(state.records.map((r) => r.possessionStatus)), "All possession");
+      document.getElementById("dataHint").textContent =
+        view === "latest" ? "Showing output/latest.json" : "Showing output/properties.json archive";
+      applyFilters();
+    }
+
+    function renderList() {
+      const root = document.getElementById("list");
+      if (!state.records.length) {
+        if (state.view === "latest") {
+          const skip = (state.lastRun && state.lastRun.skippedKnown) || 0;
+          root.innerHTML = `<div class="empty">No new or updated properties in the last scrape${skip ? ` (${skip} known URLs skipped)` : ""}. Archive is unchanged.</div>`;
+        } else if (state.scrapeState === "running") {
+          root.innerHTML = `<div class="loading">Scrape in progress — records will appear when it finishes.</div>`;
+        } else {
+          root.innerHTML = `<div class="empty">No records yet. Click <strong>Run scrape</strong> to build the archive.</div>`;
+        }
+        updateSelCount();
+        return;
+      }
+      if (!state.filtered.length) {
+        root.innerHTML = `<div class="empty">No records match the current filters.</div>`;
+        updateSelCount();
+        return;
+      }
+
+      root.innerHTML = state.filtered.map((r, idx) => {
+        const amenities = Array.isArray(r.amenities) ? r.amenities : [];
+        const highlights = Array.isArray(r.highlights) ? r.highlights : [];
+        const faqs = Array.isArray(r.faqs) ? r.faqs : [];
+        const images = Array.isArray(r.imageUrls) ? r.imageUrls : [];
+        const source = r.sourceUrl || "#";
+        const downloadHref = r.slug ? `/download.html?slug=${encodeURIComponent(r.slug)}` : "#";
+        const priceClass = r.price == null ? "price muted-price" : "price";
+        const neu = isNewRecord(r);
+        const key = recordKey(r);
+        const checked = state.selected.has(key) ? " checked" : "";
+        const sites = siteLabels(r);
+        const siteChips = sites.map((s) => `<span class="chip site">${escapeHtml(s)}</span>`).join("");
+        return `
+          <details class="card${neu ? " is-new" : ""}">
+            <summary>
+              <div class="title-row">
+                <h2><label class="card-check" onclick="event.stopPropagation()"><input type="checkbox" data-sel="${escapeAttr(key)}"${checked} /> </label>${escapeHtml(text(r.title))}</h2>
+                <div class="${priceClass}">${escapeHtml(money(r.price))}</div>
+              </div>
+              <div class="chips">
+                ${neu ? `<span class="chip new">New</span>` : ""}
+                ${siteChips}
+                <span class="chip">${escapeHtml(text(r.propertyType))}</span>
+                <span class="chip muted">${escapeHtml(r.bhk != null ? r.bhk + " BHK" : "No BHK")}</span>
+                <span class="chip muted">${escapeHtml(areaLabel(r.superBuiltUpArea))}</span>
+                <span class="chip muted">${escapeHtml(text(r.city))}${r.locality ? " · " + escapeHtml(r.locality) : ""}</span>
+                <span class="chip muted">${escapeHtml(text(r.possessionStatus))}</span>
+                <span class="chip muted">${images.length} img</span>
+              </div>
+              <div class="summary-actions" onclick="event.preventDefault()">
+                <a class="button compact" href="${escapeAttr(downloadHref)}">Download pictures</a>
+                <a class="button compact secondary" href="${escapeAttr(source)}" target="_blank" rel="noopener noreferrer">Source</a>
+              </div>
+            </summary>
+            <div class="body">
+              <div class="grid">
+                <div class="field"><div class="k">Project</div><div class="v">${escapeHtml(text(r.projectName))}</div></div>
+                <div class="field"><div class="k">Developer</div><div class="v">${escapeHtml(text(r.developer))}</div></div>
+                <div class="field"><div class="k">Slug</div><div class="v">${escapeHtml(text(r.slug))}</div></div>
+                <div class="field"><div class="k">Carpet area</div><div class="v">${escapeHtml(areaLabel(r.carpetArea))}</div></div>
+                <div class="field"><div class="k">Built-up area</div><div class="v">${escapeHtml(areaLabel(r.builtUpArea))}</div></div>
+                <div class="field"><div class="k">Super built-up</div><div class="v">${escapeHtml(areaLabel(r.superBuiltUpArea))}</div></div>
+                <div class="field"><div class="k">Price</div><div class="v">${escapeHtml(money(r.price))}</div></div>
+                <div class="field"><div class="k">Possession date</div><div class="v">${escapeHtml(text(r.possessionDate))}</div></div>
+                <div class="field"><div class="k">RERA</div><div class="v">${escapeHtml(text(r.reraNumber))}${r.reraState ? " · " + escapeHtml(r.reraState) : ""}</div></div>
+                <div class="field"><div class="k">RERA flags</div><div class="v">registered=${escapeHtml(boolLabel(r.reraRegistered))} · verified=${escapeHtml(boolLabel(r.reraVerified))}</div></div>
+                <div class="field"><div class="k">Address</div><div class="v">${escapeHtml(text(r.address))}</div></div>
+                <div class="field"><div class="k">Coords</div><div class="v">${escapeHtml(text(r.latitude))}, ${escapeHtml(text(r.longitude))}</div></div>
+                <div class="field"><div class="k">Sources</div><div class="v">${escapeHtml(sites.join(", ") || "—")}</div></div>
+                <div class="field"><div class="k">Scraped at</div><div class="v">${escapeHtml(text(r.scrapedAt))}</div></div>
+              </div>
+              <div class="field">
+                <div class="k">Amenities (${amenities.length})</div>
+                <div class="v">${amenities.length ? `<ul class="compact">${amenities.slice(0, 12).map((a) => `<li>${escapeHtml(a)}</li>`).join("")}${amenities.length > 12 ? `<li>… +${amenities.length - 12} more</li>` : ""}</ul>` : "—"}</div>
+              </div>
+              <div class="field">
+                <div class="k">Highlights (${highlights.length})</div>
+                <div class="v">${highlights.length ? `<ul class="compact">${highlights.slice(0, 8).map((a) => `<li>${escapeHtml(a)}</li>`).join("")}</ul>` : "—"}</div>
+              </div>
+              <div class="field">
+                <div class="k">FAQs</div>
+                <div class="v">${faqs.length} question(s)</div>
+              </div>
+              <div class="actions">
+                <a class="button" href="${escapeAttr(downloadHref)}">Download pictures</a>
+                <a class="button secondary" href="${escapeAttr(source)}" target="_blank" rel="noopener noreferrer">Open source page</a>
+                <button type="button" class="linkish secondary" data-copy="${idx}">Copy JSON</button>
+              </div>
+            </div>
+          </details>
+        `;
+      }).join("");
+
+      root.querySelectorAll("[data-sel]").forEach((box) => {
+        box.addEventListener("click", (e) => e.stopPropagation());
+        box.addEventListener("change", () => {
+          const k = box.getAttribute("data-sel");
+          if (box.checked) state.selected.add(k);
+          else state.selected.delete(k);
+          updateSelCount();
+        });
+      });
+
+      root.querySelectorAll("[data-copy]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const i = Number(btn.getAttribute("data-copy"));
+          navigator.clipboard.writeText(JSON.stringify(state.filtered[i], null, 2));
+          showToast("JSON copied");
+        });
+      });
+      updateSelCount();
+    }
+
+    function selectedRecords() {
+      const byKey = new Map();
+      for (const r of state.records) byKey.set(recordKey(r), r);
+      const out = [];
+      for (const k of state.selected) {
+        if (byKey.has(k)) out.push(byKey.get(k));
+      }
+      return out;
+    }
+
+    function openExportDialog() {
+      const rows = selectedRecords();
+      if (!rows.length) {
+        showToast("Select at least one property");
+        return;
+      }
+      document.getElementById("exportTitle").textContent = `${rows.length} properties selected`;
+      document.getElementById("exportJson").textContent = JSON.stringify(rows, null, 2);
+      document.getElementById("exportModal").classList.add("open");
+    }
+
+    function closeExportDialog() {
+      document.getElementById("exportModal").classList.remove("open");
+    }
+
+    async function copyExportJson() {
+      const text = document.getElementById("exportJson").textContent || "[]";
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast("Copied to clipboard");
+      } catch {
+        showToast("Clipboard failed — select text manually");
+      }
+    }
+
+    function setScrapeButton(running) {
+      const btn = document.getElementById("scrapeBtn");
+      btn.disabled = running;
+      btn.classList.toggle("running", running);
+      btn.textContent = running ? "Scraping…" : "Run scrape";
+    }
+
+    function renderBannerStats(run) {
+      const el = document.getElementById("bannerStats");
+      if (!run || typeof run !== "object") {
+        el.textContent = "";
+        return;
+      }
+      const parts = [
+        ["discovered", run.discovered],
+        ["skipped", run.skippedKnown],
+        ["scraped", run.scraped],
+        ["added", run.added],
+        ["updated", run.updated],
+      ];
+      el.innerHTML = parts
+        .filter(([, v]) => v != null)
+        .map(([k, v]) => `<span>${k} <strong>${escapeHtml(String(v))}</strong></span>`)
+        .join("");
+    }
+
+    function updateBanner(status) {
+      const banner = document.getElementById("scrapeBanner");
+      const message = document.getElementById("bannerMessage");
+      const elapsed = document.getElementById("bannerElapsed");
+      const log = document.getElementById("bannerLog");
+      const st = status.state || "idle";
+      state.scrapeState = st;
+      const run = status.runStats || state.lastRun;
+      if (status.runStats) state.lastRun = status.runStats;
+
+      if (st === "idle" && !(status.logTail || []).length && !run) {
+        banner.classList.remove("visible", "running", "ok", "error");
+        return;
+      }
+
+      banner.classList.add("visible");
+      banner.classList.toggle("running", st === "running");
+      banner.classList.toggle("ok", st === "ok");
+      banner.classList.toggle("error", st === "error");
+      message.textContent = status.message || (run && run.message) || st;
+      renderBannerStats(run);
+      log.textContent = (status.logTail || []).slice(-40).join("\n") || "(no log yet)";
+
+      if (st === "running" && status.startedAt) {
+        const start = Date.parse(status.startedAt);
+        if (!Number.isNaN(start)) {
+          elapsed.textContent = `${Math.max(0, Math.round((Date.now() - start) / 1000))}s`;
+        }
+      } else if (status.finishedAt) {
+        elapsed.textContent = `exit ${status.exitCode ?? "—"}`;
+      } else {
+        elapsed.textContent = "";
+      }
+    }
+
+    function stopPolling() {
+      if (state.pollTimer) {
+        clearInterval(state.pollTimer);
+        state.pollTimer = null;
+      }
+    }
+
+    function startPolling() {
+      stopPolling();
+      state.pollTimer = setInterval(pollStatus, POLL_MS);
+    }
+
+    async function pollStatus() {
+      try {
+        const res = await fetch("/api/scrape/status", { cache: "no-store" });
+        if (!res.ok) return;
+        const status = await res.json();
+        updateBanner(status);
+        const running = status.state === "running";
+        setScrapeButton(running);
+        if (running) {
+          startPolling();
+          return;
+        }
+        stopPolling();
+        const key = `${status.finishedAt || ""}:${status.exitCode}:${status.state}`;
+        if (status.state === "ok" && key !== state.lastFinishedKey) {
+          state.lastFinishedKey = key;
+          showToast("Scrape finished");
+          await loadData();
+          await refreshMeta();
+          setView(state.latest.length ? "latest" : state.view);
+        } else if (status.state === "error" && key !== state.lastFinishedKey) {
+          state.lastFinishedKey = key;
+          showToast(`Scrape failed (exit ${status.exitCode ?? "?"})`);
+        }
+      } catch { /* ignore */ }
+    }
+
+    async function runScrape() {
+      setScrapeButton(true);
+      document.getElementById("scrapeBanner").classList.add("visible", "running");
+      document.getElementById("bannerMessage").textContent = "Starting scrape…";
+      try {
+        const res = await fetch("/api/scrape", { method: "POST" });
+        const status = await res.json();
+        updateBanner(status);
+        if (res.status === 409) {
+          showToast("Scrape already running");
+          setScrapeButton(true);
+          startPolling();
+          return;
+        }
+        if (!res.ok && res.status !== 202) {
+          setScrapeButton(false);
+          showToast(status.message || "Failed to start scrape");
+          return;
+        }
+        startPolling();
+        await pollStatus();
+      } catch (err) {
+        setScrapeButton(false);
+        showToast(`Could not start scrape: ${err.message}`);
+      }
+    }
+
+    async function loadData() {
+      const list = document.getElementById("list");
+      try {
+        const [archiveRes, latestRes] = await Promise.all([
+          fetch("/data/properties.json", { cache: "no-store" }),
+          fetch("/data/latest.json", { cache: "no-store" }),
+        ]);
+        if (!archiveRes.ok) throw new Error(`Archive HTTP ${archiveRes.status}`);
+        const archive = await archiveRes.json();
+        const latest = latestRes.ok ? await latestRes.json() : [];
+        if (!Array.isArray(archive)) throw new Error("Expected archive JSON array");
+        state.archive = archive;
+        state.latest = Array.isArray(latest) ? latest : [];
+        if (state.latest[0] && state.latest[0].scrapedAt) {
+          state.latestScrapedAt = state.latest[0].scrapedAt;
+        }
+        setView(state.view);
+      } catch (err) {
+        if (!state.archive.length) {
+          list.innerHTML = `<div class="error">Failed to load data: ${escapeHtml(err.message)}. Click Run scrape or check the server.</div>`;
+          document.getElementById("resultCount").textContent = "No data";
+        }
+      }
+    }
+
+    document.getElementById("scrapeBtn").addEventListener("click", runScrape);
+    document.getElementById("viewAll").addEventListener("click", () => setView("all"));
+    document.getElementById("viewLatest").addEventListener("click", () => setView("latest"));
+    document.getElementById("selectAll").addEventListener("change", (e) => {
+      if (e.target.checked) {
+        for (const r of state.filtered) state.selected.add(recordKey(r));
+      } else {
+        for (const r of state.filtered) state.selected.delete(recordKey(r));
+      }
+      updateSelCount();
+      renderList();
+    });
+    document.getElementById("clearSelBtn").addEventListener("click", () => {
+      state.selected.clear();
+      updateSelCount();
+      renderList();
+    });
+    document.getElementById("exportBtn").addEventListener("click", openExportDialog);
+    document.getElementById("exportClose").addEventListener("click", closeExportDialog);
+    document.getElementById("exportCopy").addEventListener("click", copyExportJson);
+    document.getElementById("exportModal").addEventListener("click", (e) => {
+      if (e.target.id === "exportModal") closeExportDialog();
+    });
+    for (const id of ["search", "typeFilter", "cityFilter", "possessionFilter", "priceFilter", "sortBy"]) {
+      document.getElementById(id).addEventListener("input", applyFilters);
+      document.getElementById(id).addEventListener("change", applyFilters);
+    }
+
+    async function boot() {
+      await loadData();
+      await refreshMeta();
+      await pollStatus();
+    }
+
+    boot();
+  </script>
+</body>
+</html>
