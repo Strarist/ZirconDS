@@ -13,7 +13,14 @@ logger = logging.getLogger(__name__)
 DEFAULT_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0.0.0 Safari/537.36"
+    "Chrome/124.0.0.0 Safari/537.36"
+)
+
+# Some portals (e.g. 99acres) block desktop UA but accept mobile Safari.
+MOBILE_UA = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 "
+    "Mobile/15E148 Safari/604.1"
 )
 
 BASE_URL = "https://www.100acress.com"
@@ -29,6 +36,7 @@ class Fetcher:
     ) -> None:
         self.delay = delay
         self.max_retries = max_retries
+        self.user_agent = user_agent
         self._last_request_at = 0.0
         self.client = httpx.Client(
             headers={
@@ -47,13 +55,21 @@ class Fetcher:
 
     def get(self, url: str) -> str:
         last_error: Optional[Exception] = None
+        tried_mobile = self.user_agent == MOBILE_UA
         for attempt in range(1, self.max_retries + 1):
             self._throttle()
             try:
                 self._last_request_at = time.monotonic()
                 response = self.client.get(url)
-                # Anti-bot / hard client errors — do not retry
+                # Anti-bot / hard client errors — try mobile UA once, else stop
                 if response.status_code in (403, 406, 451):
+                    if not tried_mobile and response.status_code == 403:
+                        logger.info("HTTP %s for %s — retrying with mobile User-Agent", response.status_code, url)
+                        self.client.headers["User-Agent"] = MOBILE_UA
+                        tried_mobile = True
+                        continue
+                    response.raise_for_status()
+                if response.status_code == 404:
                     response.raise_for_status()
                 if response.status_code in (429, 500, 502, 503, 504):
                     wait = min(2 ** attempt, 20)
@@ -73,6 +89,13 @@ class Fetcher:
                 last_error = exc
                 code = exc.response.status_code if exc.response is not None else None
                 if code in (403, 406, 451):
+                    if not tried_mobile and code == 403:
+                        logger.info("HTTP %s for %s — retrying with mobile User-Agent", code, url)
+                        self.client.headers["User-Agent"] = MOBILE_UA
+                        tried_mobile = True
+                        continue
+                    raise RuntimeError(f"Failed to fetch {url}: {exc}") from exc
+                if code == 404:
                     raise RuntimeError(f"Failed to fetch {url}: {exc}") from exc
                 wait = min(2 ** attempt, 20)
                 logger.warning(

@@ -205,10 +205,14 @@ def infer_source_site(record: dict[str, Any]) -> str | None:
     url = (record.get("sourceUrl") or "").lower()
     if "100acress.com" in url:
         return "100acress"
+    if "99acres.com" in url:
+        return "99acres"
     if "magicbricks.com" in url:
         return "magicbricks"
     if "housing.com" in url:
         return "housing"
+    if "squareyards.com" in url:
+        return "squareyards"
     return None
 
 

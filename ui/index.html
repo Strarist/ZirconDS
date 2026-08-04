@@ -219,7 +219,7 @@
 
     .controls {
       display: grid;
-      grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr;
+      grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
       gap: 0.65rem;
       margin-bottom: 0.85rem;
       position: sticky;
@@ -549,6 +549,7 @@
 
     <div class="controls">
       <input id="search" type="search" placeholder="Search: multi-word match across project, city, RERA…" />
+      <select id="sourceFilter"><option value="">All sources</option></select>
       <select id="typeFilter"><option value="">All types</option></select>
       <select id="cityFilter"><option value="">All cities</option></select>
       <select id="possessionFilter"><option value="">All possession</option></select>
@@ -787,14 +788,25 @@
       return sorted;
     }
 
+    function recordSources(r) {
+      return siteLabels(r);
+    }
+
+    function recordMatchesSource(r, source) {
+      if (!source) return true;
+      return recordSources(r).includes(source);
+    }
+
     function applyFilters() {
       const q = document.getElementById("search").value;
+      const source = document.getElementById("sourceFilter").value;
       const type = document.getElementById("typeFilter").value;
       const city = document.getElementById("cityFilter").value;
       const possession = document.getElementById("possessionFilter").value;
       const priceMode = document.getElementById("priceFilter").value;
 
       let rows = state.records.filter((r) => {
+        if (!recordMatchesSource(r, source)) return false;
         if (type && r.propertyType !== type) return false;
         if (city && r.city !== city) return false;
         if (possession && r.possessionStatus !== possession) return false;
@@ -818,6 +830,8 @@
       document.getElementById("list").classList.toggle("latest-mode", view === "latest");
       state.records = view === "latest" ? state.latest : state.archive;
       updateStats(state.records);
+      const sourceValues = uniqueSorted(state.records.flatMap((r) => siteLabels(r)));
+      fillSelect(document.getElementById("sourceFilter"), sourceValues, "All sources");
       fillSelect(document.getElementById("typeFilter"), uniqueSorted(state.records.map((r) => r.propertyType)), "All types");
       fillSelect(document.getElementById("cityFilter"), uniqueSorted(state.records.map((r) => r.city)), "All cities");
       fillSelect(document.getElementById("possessionFilter"), uniqueSorted(state.records.map((r) => r.possessionStatus)), "All possession");
@@ -995,10 +1009,20 @@
         ["added", run.added],
         ["updated", run.updated],
       ];
-      el.innerHTML = parts
+      let html = parts
         .filter(([, v]) => v != null)
         .map(([k, v]) => `<span>${k} <strong>${escapeHtml(String(v))}</strong></span>`)
         .join("");
+      const per = run.perSite || {};
+      const siteBits = Object.keys(per).map((site) => {
+        const s = per[site] || {};
+        const blocked = s.blocked ? " blocked" : "";
+        return `<span class="chip site" title="discovered ${s.discovered || 0}, units ${s.units || 0}">${escapeHtml(site)}${blocked ? " · blocked" : ""} · ${escapeHtml(String(s.units || 0))}u</span>`;
+      });
+      if (siteBits.length) {
+        html += `<div class="chips" style="margin-top:0.35rem">${siteBits.join("")}</div>`;
+      }
+      el.innerHTML = html;
     }
 
     function updateBanner(status) {
@@ -1150,7 +1174,7 @@
     document.getElementById("exportModal").addEventListener("click", (e) => {
       if (e.target.id === "exportModal") closeExportDialog();
     });
-    for (const id of ["search", "typeFilter", "cityFilter", "possessionFilter", "priceFilter", "sortBy"]) {
+    for (const id of ["search", "sourceFilter", "typeFilter", "cityFilter", "possessionFilter", "priceFilter", "sortBy"]) {
       document.getElementById(id).addEventListener("input", applyFilters);
       document.getElementById(id).addEventListener("change", applyFilters);
     }

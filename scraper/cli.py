@@ -11,15 +11,18 @@ from typing import Any
 
 from scraper.fetch import Fetcher
 from scraper.schema import SCHEMA_KEYS, validate_record
+from scraper.sources.acres99 import Acres99Adapter
 from scraper.sources.acress100 import Acress100Adapter
 from scraper.sources.housing import HousingAdapter
 from scraper.sources.magicbricks import MagicBricksAdapter
+from scraper.sources.squareyards import SquareYardsAdapter
 from scraper.store import (
     backfill_source_meta,
     filter_new_urls,
     known_source_urls,
     latest_path_for,
     load_records,
+    match_key,
     merge_archive,
     run_stats_path_for,
     stamp_scraped_at,
@@ -28,11 +31,19 @@ from scraper.store import (
 
 logger = logging.getLogger(__name__)
 
-ADAPTERS = {
+ADAPTERS: dict[str, type] = {
     "100acress": Acress100Adapter,
+    "99acres": Acres99Adapter,
     "housing": HousingAdapter,
     "magicbricks": MagicBricksAdapter,
+    "squareyards": SquareYardsAdapter,
 }
+
+DEFAULT_SITES = ",".join(ADAPTERS.keys())
+
+
+def default_sites_csv() -> str:
+    return DEFAULT_SITES
 
 
 def write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
@@ -74,8 +85,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--sites",
-        default="100acress,housing,magicbricks",
-        help="Comma-separated sources (default: 100acress,housing,magicbricks)",
+        default=DEFAULT_SITES,
+        help=f"Comma-separated sources (default: {DEFAULT_SITES})",
     )
     parser.add_argument(
         "--category",
@@ -147,16 +158,19 @@ def main(argv: list[str] | None = None) -> int:
                 "scraped": 0,
                 "failed": 0,
                 "units": 0,
+                "blocked": False,
             }
             try:
                 urls = adapter.discover(fetcher, max_projects=None)
             except Exception as exc:
                 logger.exception("Discovery failed for %s: %s", site, exc)
-                stats["perSite"][site] = {**site_stats, "error": str(exc)}
+                stats["perSite"][site] = {**site_stats, "error": str(exc), "blocked": True}
                 continue
 
             site_stats["discovered"] = len(urls)
             stats["discovered"] += len(urls)
+            if len(urls) == 0:
+                site_stats["blocked"] = True
             urls = filter_new_urls(urls, known)
             skipped = site_stats["discovered"] - len(urls)
             site_stats["skippedKnown"] = skipped
@@ -221,6 +235,18 @@ def main(argv: list[str] | None = None) -> int:
 
     stats["added"] = len(added)
     stats["updated"] = len(updated)
+    # Sanity: duplicate match keys in archive
+    keys = [match_key(r) for r in merged]
+    key_counts: dict[str, int] = {}
+    for k in keys:
+        if not k:
+            continue
+        key_counts[k] = key_counts.get(k, 0) + 1
+    dup_keys = sum(1 for v in key_counts.values() if v > 1)
+    stats["duplicateMatchKeys"] = dup_keys
+    if dup_keys:
+        logger.warning("Archive has %s duplicate match-key group(s)", dup_keys)
+
     if len(added) == 0 and len(updated) == 0:
         stats["message"] = (
             f"No new projects found ({stats['skippedKnown']} known skipped, "

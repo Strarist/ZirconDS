@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="220" viewBox="0 0 640 220" role="img" aria-label="Coverage bars">
+  <rect width="640" height="220" fill="#f7f3ea"/>
+  <text x="24" y="36" font-family="Georgia, serif" font-size="18" fill="#1c2420">Source coverage (illustrative)</text>
+  <text x="24" y="58" font-family="Segoe UI, sans-serif" font-size="12" fill="#5c6a63">Relative discovery depth across NCR listing seeds  live counts vary per run</text>
+
+  <!-- bars -->
+  <text x="24" y="100" font-family="Segoe UI, sans-serif" font-size="12" fill="#1c2420">100acress</text>
+  <rect x="120" y="86" width="280" height="18" rx="6" fill="#0f6b4c"/>
+
+  <text x="24" y="128" font-family="Segoe UI, sans-serif" font-size="12" fill="#1c2420">MagicBricks</text>
+  <rect x="120" y="114" width="360" height="18" rx="6" fill="#1c5f8a"/>
+
+  <text x="24" y="156" font-family="Segoe UI, sans-serif" font-size="12" fill="#1c2420">99acres</text>
+  <rect x="120" y="142" width="340" height="18" rx="6" fill="#2a6f8f"/>
+
+  <text x="24" y="184" font-family="Segoe UI, sans-serif" font-size="12" fill="#1c2420">SquareYards</text>
+  <rect x="120" y="170" width="300" height="18" rx="6" fill="#4a7c59"/>
+
+  <text x="24" y="212" font-family="Segoe UI, sans-serif" font-size="12" fill="#1c2420">Housing</text>
+  <rect x="120" y="198" width="80" height="18" rx="6" fill="#8a4b12"/>
+  <text x="210" y="212" font-family="Segoe UI, sans-serif" font-size="11" fill="#8a4b12">often soft-blocked</text>
+</svg>

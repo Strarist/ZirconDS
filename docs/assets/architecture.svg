@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="280" viewBox="0 0 960 280" role="img" aria-label="ZirconDS architecture">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f7f3ea"/>
+      <stop offset="100%" stop-color="#eaf2ed"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#0f6b4c"/>
+    </marker>
+  </defs>
+  <rect width="960" height="280" fill="url(#bg)"/>
+  <text x="40" y="42" font-family="Georgia, serif" font-size="22" fill="#1c2420">ZirconDS multi-source pipeline</text>
+
+  <rect x="40" y="70" width="150" height="56" rx="12" fill="#fffdf8" stroke="#c9d5ce"/>
+  <text x="115" y="104" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="14" fill="#1c2420">Discover</text>
+
+  <rect x="230" y="70" width="150" height="56" rx="12" fill="#fffdf8" stroke="#c9d5ce"/>
+  <text x="305" y="104" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="14" fill="#1c2420">Skip known</text>
+
+  <rect x="420" y="70" width="150" height="56" rx="12" fill="#fffdf8" stroke="#c9d5ce"/>
+  <text x="495" y="104" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="14" fill="#1c2420">Fetch units</text>
+
+  <rect x="610" y="70" width="150" height="56" rx="12" fill="#d8eee4" stroke="#0f6b4c"/>
+  <text x="685" y="104" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="14" fill="#0f6b4c">Null-fill merge</text>
+
+  <rect x="800" y="70" width="120" height="56" rx="12" fill="#0f6b4c"/>
+  <text x="860" y="104" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="14" fill="#fff">Archive</text>
+
+  <line x1="190" y1="98" x2="230" y2="98" stroke="#0f6b4c" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="380" y1="98" x2="420" y2="98" stroke="#0f6b4c" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="570" y1="98" x2="610" y2="98" stroke="#0f6b4c" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="760" y1="98" x2="800" y2="98" stroke="#0f6b4c" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <text x="40" y="180" font-family="Segoe UI, sans-serif" font-size="13" fill="#5c6a63">Sources</text>
+  <rect x="40" y="195" width="110" height="36" rx="18" fill="#fffdf8" stroke="#c9d5ce"/>
+  <text x="95" y="218" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="12" fill="#1c2420">100acress</text>
+  <rect x="160" y="195" width="100" height="36" rx="18" fill="#fffdf8" stroke="#c9d5ce"/>
+  <text x="210" y="218" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="12" fill="#1c2420">99acres</text>
+  <rect x="270" y="195" width="100" height="36" rx="18" fill="#fffdf8" stroke="#c9d5ce"/>
+  <text x="320" y="218" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="12" fill="#1c2420">Housing</text>
+  <rect x="380" y="195" width="120" height="36" rx="18" fill="#fffdf8" stroke="#c9d5ce"/>
+  <text x="440" y="218" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="12" fill="#1c2420">MagicBricks</text>
+  <rect x="510" y="195" width="120" height="36" rx="18" fill="#fffdf8" stroke="#c9d5ce"/>
+  <text x="570" y="218" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="12" fill="#1c2420">SquareYards</text>
+
+  <text x="40" y="260" font-family="Segoe UI, sans-serif" font-size="12" fill="#5c6a63">One JSON object per BHK/unit · cross-source enrich · never invent price / area / RERA</text>
+</svg>

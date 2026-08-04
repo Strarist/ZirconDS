@@ -43,6 +43,14 @@ ALLOWED_IMAGE_HOSTS = (
     "is1-3.housingcdn.com",
     "housing.com",
     "www.housing.com",
+    "newprojects.99acres.com",
+    "imagecdn.99acres.com",
+    "www.99acres.com",
+    "99acres.com",
+    "static.squareyards.com",
+    "www.squareyards.com",
+    "squareyards.com",
+    "doc.squareyards.com",
 )
 
 _job_lock = threading.Lock()
@@ -127,6 +135,15 @@ def _reader_thread(proc: subprocess.Popen[str]) -> None:
             _process = None
 
 
+def _default_sites_csv() -> str:
+    try:
+        from scraper.cli import default_sites_csv
+
+        return default_sites_csv()
+    except Exception:
+        return "100acress,99acres,housing,magicbricks,squareyards"
+
+
 def start_scrape() -> tuple[int, dict[str, Any]]:
     """Start scraper subprocess. Returns (http_status, body)."""
     global _process
@@ -139,12 +156,13 @@ def start_scrape() -> tuple[int, dict[str, Any]]:
             }
 
         _log_lines.clear()
+        sites = _default_sites_csv()
         cmd = [
             sys.executable,
             "-m",
             "scraper",
             "--sites",
-            "100acress,housing,magicbricks",
+            sites,
             "--category",
             "all",
             "--out",
@@ -178,7 +196,7 @@ def start_scrape() -> tuple[int, dict[str, Any]]:
             startedAt=_utc_now(),
             finishedAt=None,
             exitCode=None,
-            message="Scrape in progress (100acress + housing + magicbricks)",
+            message=f"Scrape in progress ({sites})",
             runStats=None,
         )
         threading.Thread(target=_reader_thread, args=(proc,), daemon=True).start()
