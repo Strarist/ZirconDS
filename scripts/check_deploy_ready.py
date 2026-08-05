@@ -110,9 +110,9 @@ def main() -> int:
     check("Procfile binds 0.0.0.0", "0.0.0.0" in proc and "$PORT" in proc)
     vercel = (ROOT / "vercel.json").read_text(encoding="utf-8")
     check(
-        "vercel.json needs Render URL",
-        "REPLACE_WITH_RENDER_URL" in vercel,
-        "update after Render deploy",
+        "vercel.json points at Render",
+        "zirconds.onrender.com" in vercel and "REPLACE_WITH_RENDER_URL" not in vercel,
+        "https://zirconds.onrender.com",
     )
 
     # Live local UI (optional)

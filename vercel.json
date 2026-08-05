@@ -5,19 +5,19 @@
   "rewrites": [
     {
       "source": "/data/:path*",
-      "destination": "https://REPLACE_WITH_RENDER_URL/data/:path*"
+      "destination": "https://zirconds.onrender.com/data/:path*"
     },
     {
       "source": "/api/:path*",
-      "destination": "https://REPLACE_WITH_RENDER_URL/api/:path*"
+      "destination": "https://zirconds.onrender.com/api/:path*"
     },
     {
       "source": "/proxy-image",
-      "destination": "https://REPLACE_WITH_RENDER_URL/proxy-image"
+      "destination": "https://zirconds.onrender.com/proxy-image"
     },
     {
       "source": "/healthz",
-      "destination": "https://REPLACE_WITH_RENDER_URL/healthz"
+      "destination": "https://zirconds.onrender.com/healthz"
     }
   ],
   "headers": [
