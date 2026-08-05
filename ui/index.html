@@ -349,6 +349,12 @@
 
     .select-bar .sel-count { color: var(--muted); font-size: 0.85rem; margin-right: auto; }
 
+    .select-bar #copySelectedBtn:disabled,
+    .select-bar #exportBtn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
     .card-check {
       display: inline-flex;
       align-items: center;
@@ -570,7 +576,8 @@
     <div class="select-bar" id="selectBar">
       <label><input type="checkbox" id="selectAll" /> Select all (filtered)</label>
       <span class="sel-count" id="selCount">0 selected</span>
-      <button type="button" class="linkish" id="exportBtn">Export selected</button>
+      <button type="button" class="linkish" id="copySelectedBtn" disabled>Copy selected JSON</button>
+      <button type="button" class="linkish secondary" id="exportBtn" disabled>Preview export</button>
       <button type="button" class="linkish secondary" id="clearSelBtn">Clear</button>
     </div>
 
@@ -621,9 +628,12 @@
     };
 
     function recordKey(r) {
-      if (r && r.slug) return `slug:${r.slug}`;
+      const slug = (r && r.slug) || "";
       const src = (r && r.sourceUrl) || "";
-      return `src:${src}|${r && r.bhk}|${r && r.superBuiltUpArea}`;
+      const bhk = r && r.bhk != null ? r.bhk : "";
+      const area = r && r.superBuiltUpArea != null ? r.superBuiltUpArea : "";
+      if (slug) return `slug:${slug}|${bhk}|${area}`;
+      return `src:${src}|${bhk}|${area}`;
     }
 
     function siteLabels(r) {
@@ -643,6 +653,9 @@
       const allOn = keys.length > 0 && keys.every((k) => state.selected.has(k));
       allBox.checked = allOn;
       allBox.indeterminate = n > 0 && !allOn;
+      const hasSel = n > 0;
+      document.getElementById("copySelectedBtn").disabled = !hasSel;
+      document.getElementById("exportBtn").disabled = !hasSel;
     }
 
     function money(value) {
@@ -939,8 +952,7 @@
       root.querySelectorAll("[data-copy]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const i = Number(btn.getAttribute("data-copy"));
-          navigator.clipboard.writeText(JSON.stringify(state.filtered[i], null, 2));
-          showToast("JSON copied");
+          copyText(JSON.stringify(state.filtered[i], null, 2), "JSON copied");
         });
       });
       updateSelCount();
@@ -948,12 +960,56 @@
 
     function selectedRecords() {
       const byKey = new Map();
+      // Prefer archive so selection survives view/filter switches
+      for (const r of state.archive) byKey.set(recordKey(r), r);
       for (const r of state.records) byKey.set(recordKey(r), r);
       const out = [];
       for (const k of state.selected) {
         if (byKey.has(k)) out.push(byKey.get(k));
       }
       return out;
+    }
+
+    function formatSelectedJson(rows) {
+      return JSON.stringify(rows, null, 2);
+    }
+
+    async function copyText(text, okMessage) {
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast(okMessage);
+        return true;
+      } catch {
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          ta.setAttribute("readonly", "");
+          ta.style.position = "fixed";
+          ta.style.left = "-9999px";
+          document.body.appendChild(ta);
+          ta.select();
+          const ok = document.execCommand("copy");
+          document.body.removeChild(ta);
+          if (ok) {
+            showToast(okMessage);
+            return true;
+          }
+        } catch {
+          /* fall through */
+        }
+        showToast("Clipboard failed — use Preview export and copy manually");
+        return false;
+      }
+    }
+
+    async function copySelectedJson() {
+      const rows = selectedRecords();
+      if (!rows.length) {
+        showToast("Select at least one property");
+        return;
+      }
+      const text = formatSelectedJson(rows);
+      await copyText(text, `Copied ${rows.length} properties as JSON`);
     }
 
     function openExportDialog() {
@@ -963,7 +1019,7 @@
         return;
       }
       document.getElementById("exportTitle").textContent = `${rows.length} properties selected`;
-      document.getElementById("exportJson").textContent = JSON.stringify(rows, null, 2);
+      document.getElementById("exportJson").textContent = formatSelectedJson(rows);
       document.getElementById("exportModal").classList.add("open");
     }
 
@@ -973,12 +1029,7 @@
 
     async function copyExportJson() {
       const text = document.getElementById("exportJson").textContent || "[]";
-      try {
-        await navigator.clipboard.writeText(text);
-        showToast("Copied to clipboard");
-      } catch {
-        showToast("Clipboard failed — select text manually");
-      }
+      await copyText(text, "Copied to clipboard");
     }
 
     function setScrapeButton(running) {
@@ -1160,6 +1211,7 @@
       updateSelCount();
       renderList();
     });
+    document.getElementById("copySelectedBtn").addEventListener("click", copySelectedJson);
     document.getElementById("exportBtn").addEventListener("click", openExportDialog);
     document.getElementById("exportClose").addEventListener("click", closeExportDialog);
     document.getElementById("exportCopy").addEventListener("click", copyExportJson);
