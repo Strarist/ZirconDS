@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from scraper.fetch import Fetcher
-from scraper.schema import SCHEMA_KEYS, validate_record
+from scraper.schema import SCHEMA_KEYS, ensure_schema, validate_record
 from scraper.sources.acres99 import Acres99Adapter
 from scraper.sources.acress100 import Acress100Adapter, NonProjectPageError
 from scraper.sources.housing import HousingAdapter
@@ -201,9 +201,9 @@ def main(argv: list[str] | None = None) -> int:
                 logger.info("[%s %s/%s] %s", site, i, len(urls), url)
                 try:
                     unit_records = adapter.fetch_project(fetcher, url)
+                    normalized: list[dict[str, Any]] = []
                     for rec in unit_records:
-                        if not isinstance(rec.get("imageUrls"), list):
-                            rec["imageUrls"] = []
+                        rec = ensure_schema(rec)
                         core = {k: rec.get(k) for k in SCHEMA_KEYS}
                         problems = validate_record(core)
                         if problems:
@@ -211,7 +211,8 @@ def main(argv: list[str] | None = None) -> int:
                         missing = [k for k in SCHEMA_KEYS if k not in rec]
                         if missing:
                             raise RuntimeError(f"missing schema keys: {missing}")
-                    batch.extend(unit_records)
+                        normalized.append(rec)
+                    batch.extend(normalized)
                     known.add(url)
                     known.add(url.rstrip("/"))
                     known.add(url if url.endswith("/") else url + "/")

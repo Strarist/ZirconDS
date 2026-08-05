@@ -873,7 +873,10 @@
         const amenities = Array.isArray(r.amenities) ? r.amenities : [];
         const highlights = Array.isArray(r.highlights) ? r.highlights : [];
         const faqs = Array.isArray(r.faqs) ? r.faqs : [];
-        const images = Array.isArray(r.imageUrls) ? r.imageUrls : [];
+        const imageList = Array.isArray(r.images)
+          ? r.images.map((img) => (typeof img === "string" ? img : (img && img.url))).filter(Boolean)
+          : (Array.isArray(r.imageUrls) ? r.imageUrls.filter(Boolean) : []);
+        const images = imageList;
         const source = r.sourceUrl || "#";
         const downloadHref = r.slug ? `/download.html?slug=${encodeURIComponent(r.slug)}` : "#";
         const priceClass = r.price == null ? "price muted-price" : "price";
@@ -952,7 +955,7 @@
       root.querySelectorAll("[data-copy]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const i = Number(btn.getAttribute("data-copy"));
-          copyText(JSON.stringify(state.filtered[i], null, 2), "JSON copied");
+          copyText(JSON.stringify(publicRecord(state.filtered[i]), null, 2), "JSON copied");
         });
       });
       updateSelCount();
@@ -970,8 +973,57 @@
       return out;
     }
 
+    const PUBLIC_SCHEMA_KEYS = [
+      "title", "slug", "propertyType", "listingType", "status", "projectName", "developer",
+      "city", "locality", "pincode", "address", "description", "featured", "hotDeal",
+      "exclusive", "vastuCompliant", "bhk", "bathrooms", "carpetArea", "builtUpArea",
+      "superBuiltUpArea", "propertyAge", "floor", "totalFloors", "totalUnits", "parkingSpaces",
+      "parkingType", "furnishing", "possessionStatus", "possessionDate", "launchDate", "facing",
+      "latitude", "longitude", "price", "maintenancePerMonth", "stampDuty", "registrationCharges",
+      "reraNumber", "reraState", "reraRegistered", "reraVerified", "bankApprovals", "amenities",
+      "overlooking", "images", "seoTitle", "seoDescription", "seoKeywords", "h1", "aboutSection",
+      "highlights", "locationAdvantages", "whyInvest", "whyConsider", "addressSection", "faqs",
+    ];
+
+    function coerceExportImages(record) {
+      const raw = Array.isArray(record.images) && record.images.length
+        ? record.images
+        : (Array.isArray(record.imageUrls) ? record.imageUrls : []);
+      const out = [];
+      const seen = new Set();
+      for (const item of raw) {
+        const url = typeof item === "string" ? item.trim() : String((item && item.url) || "").trim();
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        const order = out.length;
+        out.push({
+          url,
+          type: (item && item.type) || (order === 0 ? "EXTERIOR" : "GALLERY"),
+          is_primary: order === 0,
+          order,
+        });
+      }
+      return out;
+    }
+
+    function publicRecord(record) {
+      const out = {};
+      for (const key of PUBLIC_SCHEMA_KEYS) {
+        if (key === "images") {
+          out.images = coerceExportImages(record);
+        } else if (Object.prototype.hasOwnProperty.call(record, key)) {
+          out[key] = record[key];
+        } else {
+          out[key] = ["bankApprovals", "amenities", "overlooking", "seoKeywords", "highlights", "faqs"].includes(key)
+            ? []
+            : (key === "listingType" ? "BUY" : key === "status" ? "ACTIVE" : null);
+        }
+      }
+      return out;
+    }
+
     function formatSelectedJson(rows) {
-      return JSON.stringify(rows, null, 2);
+      return JSON.stringify(rows.map(publicRecord), null, 2);
     }
 
     async function copyText(text, okMessage) {

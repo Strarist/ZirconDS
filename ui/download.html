@@ -173,7 +173,9 @@
           document.getElementById("subtitle").textContent = "";
           return;
         }
-        const images = Array.isArray(record.imageUrls) ? record.imageUrls.filter(Boolean) : [];
+        const images = Array.isArray(record.images)
+          ? record.images.map((img) => (typeof img === "string" ? img : (img && img.url))).filter(Boolean)
+          : (Array.isArray(record.imageUrls) ? record.imageUrls.filter(Boolean) : []);
         document.getElementById("title").textContent = record.projectName || record.title || "Property pictures";
         document.getElementById("subtitle").textContent =
           `${images.length} image(s) · ${record.bhk != null ? record.bhk + " BHK · " : ""}${record.slug || ""}`;

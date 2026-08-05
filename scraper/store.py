@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from scraper.normalize import slugify
-from scraper.schema import ARRAY_KEYS, SCHEMA_KEYS
+from scraper.schema import ARRAY_KEYS, SCHEMA_KEYS, coerce_images
 
 
 def utc_now_iso() -> str:
@@ -154,6 +154,12 @@ def merge_record_fields(existing: dict[str, Any], incoming: dict[str, Any]) -> t
     for key in SCHEMA_KEYS:
         old = out.get(key)
         new = incoming.get(key)
+        if key == "images":
+            combined = coerce_images(list(old or []) + list(new or []))
+            if combined != coerce_images(old or []):
+                out[key] = combined
+                changed = True
+            continue
         if key in ARRAY_KEYS:
             combined = _union_lists(old, new)
             if combined != (old or []):
@@ -164,12 +170,18 @@ def merge_record_fields(existing: dict[str, Any], incoming: dict[str, Any]) -> t
             out[key] = new
             changed = True
 
-    # Verification extras
-    for key in ("imageUrls",):
-        combined = _union_lists(out.get(key), incoming.get(key))
-        if combined != (out.get(key) or []):
-            out[key] = combined
+    # Legacy imageUrls → fold into images
+    legacy = []
+    for rec in (existing, incoming):
+        for u in rec.get("imageUrls") or []:
+            if isinstance(u, str) and u.strip():
+                legacy.append(u.strip())
+    if legacy:
+        combined = coerce_images(list(out.get("images") or []) + legacy)
+        if combined != coerce_images(out.get("images") or []):
+            out["images"] = combined
             changed = True
+    out.pop("imageUrls", None)
 
     sources = merge_sources(out.get("sources"), incoming.get("sources"))
     # Also fold legacy sourceUrl into sources

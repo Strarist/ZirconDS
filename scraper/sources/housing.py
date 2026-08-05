@@ -22,7 +22,7 @@ from scraper.normalize import (
     parse_possession_date,
     slugify,
 )
-from scraper.schema import ensure_schema
+from scraper.schema import ensure_schema, urls_to_images
 from scraper.sources.base import SourceAdapter
 from scraper.store import ensure_source_meta
 
@@ -157,9 +157,9 @@ class HousingAdapter(SourceAdapter):
                     "seoTitle": title,
                     "h1": title,
                     "possessionDate": parse_possession_date((blob or {}).get("possession_date")),
+                    "images": urls_to_images([]),
                 }
             )
-            record["imageUrls"] = []
             ensure_source_meta(record, self.site, url)
             records.append(record)
         return records

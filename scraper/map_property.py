@@ -27,7 +27,7 @@ from scraper.normalize import (
 )
 from scraper.parse_html import HtmlExtras
 from scraper.parse_rsc import location_blurbs, resolve_amenities, resolve_bhk_details, resolve_highlights
-from scraper.schema import ensure_schema
+from scraper.schema import ensure_schema, urls_to_images
 
 
 def _seo_keywords(
@@ -327,10 +327,13 @@ def map_unit_records(
             "propertyAge": None,
             "floor": None,
             "totalFloors": None,
+            "totalUnits": None,
             "parkingSpaces": None,
+            "parkingType": None,
             "furnishing": None,
             "possessionStatus": possession_status,
             "possessionDate": possession_date,
+            "launchDate": None,
             "facing": None,
             "latitude": lat,
             "longitude": lng,
@@ -344,6 +347,8 @@ def map_unit_records(
             "reraVerified": rera_verified,
             "bankApprovals": [],
             "amenities": amenities,
+            "overlooking": [],
+            "images": urls_to_images(image_urls),
             "seoTitle": seo_title,
             "seoDescription": seo_description,
             "seoKeywords": _seo_keywords(project_name, locality, city, bhk, property_type),
@@ -357,7 +362,5 @@ def map_unit_records(
             "faqs": faqs,
         }
         cleaned = ensure_schema(record)
-        # Verification-only extras (stripped by ensure_schema if passed earlier)
-        cleaned["imageUrls"] = image_urls
         records.append(cleaned)
     return records

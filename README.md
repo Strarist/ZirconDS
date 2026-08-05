@@ -53,7 +53,7 @@ ZirconDS instead:
 3. Maps each BHK/unit into a fixed website schema  
 4. **Null-fill merges** matched units across sources (one row per property/unit)  
 5. Writes `properties.json` (archive) + `latest.json` (added/updated this run)  
-6. **Uploads photos to S3** and rewrites `imageUrls` to public S3 URLs
+6. **Uploads photos to S3** and rewrites `images[].url` to public S3 URLs
 
 ```mermaid
 flowchart LR
@@ -135,7 +135,7 @@ python -m scraper --jsonl output/new.jsonl
 
 ## S3 photo upload
 
-After scraping, rewrite `imageUrls` from portal CDNs to public S3 URLs:
+After scraping, rewrite `images[].url` from portal CDNs to public S3 URLs:
 
 ```bash
 python -m scraper.upload_images
@@ -178,14 +178,15 @@ Production:
 
 Core fields: `scraper/schema.py` (`SCHEMA_KEYS`). Missing values stay `null` / `[]`.
 
-Verification extras: `sourceUrl`, `imageUrls`, `scrapedAt`, `sourceSite`, `sources` (`[{site, url}, …]`).
+Verification extras (UI only): `sourceUrl`, `scrapedAt`, `sourceSite`, `sources` (`[{site, url}, …]`).
 
 Notes:
 
 - Unit `price` is `null` when the portal says “Call for Price” (no project minPrice fallback per BHK).  
 - 100acress `bhk_Area` maps to `superBuiltUpArea`.  
 - 99acres carpet vs super from `floorPlans.areaType`.  
-- After `upload_images`, `imageUrls` are S3 public URLs under `zircondsphotos`.
+- `images` is `[{url, type, is_primary, order}, …]`; after `upload_images`, `url` values are S3 public links.  
+- Copy/export uses the public schema only (no verification extras).
 
 ## Deploy
 

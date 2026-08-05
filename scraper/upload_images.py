@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from scraper.schema import coerce_images, ensure_schema
 from scraper.store import load_records, match_key, write_records
 
 logger = logging.getLogger(__name__)
@@ -210,28 +211,38 @@ def process_records(
     }
     processed_records = 0
 
-    for record in records:
-        urls = record.get("imageUrls")
-        if not isinstance(urls, list) or not urls:
+    for idx, record in enumerate(records):
+        records[idx] = ensure_schema(record)
+        record = records[idx]
+        images = coerce_images(record.get("images"))
+        # Also fold any leftover legacy imageUrls
+        if record.get("imageUrls"):
+            images = coerce_images(images + list(record.get("imageUrls") or []))
+        if not images:
             continue
         if limit is not None and processed_records >= limit:
             break
 
-        new_urls: list[str] = []
+        new_images: list[dict[str, Any]] = []
         changed = False
-        for raw in urls:
-            if not isinstance(raw, str) or not raw.strip():
+        for img in images:
+            src = str(img.get("url") or "").strip()
+            if not src:
                 continue
             stats["urls_seen"] += 1
-            src = raw.strip()
+            meta = {
+                "type": img.get("type") or "GALLERY",
+                "is_primary": bool(img.get("is_primary")),
+                "order": img.get("order"),
+            }
             if is_our_s3_url(src, bucket, region):
                 stats["urls_skipped_s3"] += 1
-                new_urls.append(src)
+                new_images.append({**meta, "url": src})
                 continue
             if src in cache:
                 stats["urls_reused"] += 1
                 mapped = cache[src]
-                new_urls.append(mapped)
+                new_images.append({**meta, "url": mapped})
                 if mapped != src:
                     changed = True
                 continue
@@ -247,23 +258,19 @@ def process_records(
                     dry_run=dry_run,
                 )
                 stats["urls_uploaded"] += 1
-                new_urls.append(mapped)
+                new_images.append({**meta, "url": mapped})
                 if mapped != src:
                     changed = True
             except Exception as exc:  # noqa: BLE001
                 stats["urls_failed"] += 1
                 logger.warning("failed %s: %s", src[:100], exc)
-                new_urls.append(src)
+                new_images.append({**meta, "url": src})
 
-        if changed:
-            # Preserve order, drop duplicates after upload mapping
-            seen: set[str] = set()
-            deduped: list[str] = []
-            for u in new_urls:
-                if u not in seen:
-                    seen.add(u)
-                    deduped.append(u)
-            record["imageUrls"] = deduped
+        normalized = coerce_images(new_images)
+        if changed or record.get("imageUrls") or record.get("images") != normalized:
+            record["images"] = normalized
+            record.pop("imageUrls", None)
+            records[idx] = ensure_schema(record)
             stats["records_touched"] += 1
         processed_records += 1
 
@@ -272,7 +279,7 @@ def process_records(
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="Upload property imageUrls to S3 and rewrite JSON with public S3 URLs.",
+        description="Upload property images to S3 and rewrite JSON with public S3 image URLs.",
     )
     p.add_argument(
         "--in",
@@ -295,7 +302,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit",
         type=int,
         default=None,
-        help="Only process the first N records that have imageUrls",
+        help="Only process the first N records that have images",
     )
     p.add_argument(
         "--dry-run",

@@ -86,14 +86,23 @@ def main() -> int:
     if props.is_file():
         data = json.loads(props.read_text(encoding="utf-8"))
         check("properties.json is array", isinstance(data, list), f"{len(data)} records")
-        with_imgs = sum(1 for r in data if isinstance(r, dict) and r.get("imageUrls"))
-        s3_refs = sum(
+        with_imgs = sum(
             1
             for r in data
             if isinstance(r, dict)
-            for u in (r.get("imageUrls") or [])
-            if isinstance(u, str) and "zircondsphotos.s3" in u
+            and (r.get("images") or r.get("imageUrls"))
         )
+        s3_refs = 0
+        for r in data:
+            if not isinstance(r, dict):
+                continue
+            for item in r.get("images") or []:
+                url = item if isinstance(item, str) else (item or {}).get("url")
+                if isinstance(url, str) and "zircondsphotos.s3" in url:
+                    s3_refs += 1
+            for u in r.get("imageUrls") or []:
+                if isinstance(u, str) and "zircondsphotos.s3" in u:
+                    s3_refs += 1
         check("records with images", with_imgs > 0, str(with_imgs))
         check("S3 image URL refs", s3_refs > 0, str(s3_refs))
 
@@ -130,6 +139,13 @@ def main() -> int:
     if props.is_file():
         data = json.loads(props.read_text(encoding="utf-8"))
         for rec in data:
+            for item in rec.get("images") or []:
+                url = item if isinstance(item, str) else (item or {}).get("url")
+                if isinstance(url, str) and "zircondsphotos.s3" in url:
+                    sample_img = url
+                    break
+            if sample_img:
+                break
             for url in rec.get("imageUrls") or []:
                 if isinstance(url, str) and "zircondsphotos.s3" in url:
                     sample_img = url
@@ -140,7 +156,7 @@ def main() -> int:
         ok, detail = http_ok(sample_img, timeout=30)
         check("public S3 sample image", ok, detail)
     else:
-        check("public S3 sample image", False, "no S3 imageUrls found")
+        check("public S3 sample image", False, "no S3 images found")
 
     print(f"\n=== Result: {PASS} passed, {FAIL} failed ===")
     if FAIL:

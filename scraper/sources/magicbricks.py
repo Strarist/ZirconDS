@@ -24,7 +24,7 @@ from scraper.normalize import (
     price_to_inr,
     slugify,
 )
-from scraper.schema import ensure_schema
+from scraper.schema import ensure_schema, urls_to_images
 from scraper.sources.base import SourceAdapter
 from scraper.store import ensure_source_meta
 
@@ -235,11 +235,11 @@ class MagicBricksAdapter(SourceAdapter):
                     "reraState": rera_state,
                     "reraRegistered": rera_registered,
                     "reraVerified": rera_registered,
+                    "images": urls_to_images(image_urls),
                     "seoTitle": title,
                     "h1": clean_text(soup.find("h1").get_text(" ", strip=True)) if soup.find("h1") else title,
                 }
             )
-            record["imageUrls"] = list(image_urls)
             ensure_source_meta(record, self.site, url)
             records.append(record)
         return records
