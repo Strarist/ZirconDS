@@ -325,8 +325,6 @@
       color: #4a3f6b;
     }
 
-    .summary-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; }
-
     .select-bar {
       display: flex;
       flex-wrap: wrap;
@@ -477,8 +475,6 @@
       color: var(--accent);
       border: 1px solid color-mix(in srgb, var(--accent) 40%, white);
     }
-
-    a.button.compact { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
 
     .empty, .error, .loading {
       padding: 2rem;
@@ -889,10 +885,6 @@
                 <span class="chip muted">${escapeHtml(text(r.city))}${r.locality ? " · " + escapeHtml(r.locality) : ""}</span>
                 <span class="chip muted">${escapeHtml(text(r.possessionStatus))}</span>
                 <span class="chip muted">${images.length} img</span>
-              </div>
-              <div class="summary-actions" onclick="event.preventDefault()">
-                <a class="button compact" href="${escapeAttr(downloadHref)}">Download pictures</a>
-                <a class="button compact secondary" href="${escapeAttr(source)}" target="_blank" rel="noopener noreferrer">Source</a>
               </div>
             </summary>
             <div class="body">
