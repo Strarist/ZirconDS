@@ -3,50 +3,48 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Download property pictures</title>
+  <title>Download property pictures — ZirconDS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
   <style>
-    :root {
-      --bg: #f3efe6;
-      --ink: #1c2420;
-      --muted: #5c6a63;
-      --line: #c9d5ce;
-      --panel: rgba(255, 252, 246, 0.92);
-      --accent: #0f6b4c;
-      --shadow: 0 18px 40px rgba(28, 36, 32, 0.08);
-      --radius: 18px;
+    .dl-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1rem;
     }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      color: var(--ink);
-      font-family: "DM Sans", sans-serif;
-      background:
-        radial-gradient(circle at top left, #dff0e7 0%, transparent 42%),
-        linear-gradient(180deg, #f7f3ea 0%, var(--bg) 100%);
-      min-height: 100vh;
+    .dl-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.18s var(--ease), border-color 0.18s ease;
     }
-    .wrap {
-      width: min(1100px, calc(100% - 2rem));
-      margin: 0 auto;
-      padding: 2rem 0 3rem;
+    .dl-card:hover {
+      transform: translateY(-2px);
+      border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
     }
-    a.back {
-      color: var(--accent);
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 0.92rem;
+    .dl-card img {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
+      background: #e7efe9;
+      display: block;
     }
-    h1 {
-      font-family: Fraunces, Georgia, serif;
-      margin: 0.75rem 0 0.35rem;
-      letter-spacing: -0.03em;
+    .dl-card .meta {
+      padding: 0.75rem 0.85rem 0.95rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
     }
-    .sub {
+    .dl-card .meta span {
       color: var(--muted);
-      margin: 0 0 1.25rem;
+      font-size: 0.8rem;
+      word-break: break-all;
     }
     .topbar {
       display: flex;
@@ -55,75 +53,41 @@
       gap: 1rem;
       margin-bottom: 0.35rem;
     }
+    a.back {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.92rem;
+    }
     .note {
       color: var(--muted);
       font-size: 0.88rem;
-      margin: -0.35rem 0 1.1rem;
+      margin: -0.15rem 0 1.1rem;
     }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 1rem;
+    .sub { color: var(--muted); margin: 0 0 1rem; }
+    h1.page-title {
+      font-family: Fraunces, Georgia, serif;
+      margin: 0.75rem 0 0.35rem;
+      letter-spacing: -0.03em;
     }
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      overflow: hidden;
-      box-shadow: var(--shadow);
-      display: flex;
-      flex-direction: column;
-    }
-    .card img {
-      width: 100%;
-      aspect-ratio: 4 / 3;
-      object-fit: cover;
-      background: #e7efe9;
-      display: block;
-    }
-    .card .meta {
-      padding: 0.75rem 0.85rem 0.95rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.55rem;
-    }
-    .card .meta span {
-      color: var(--muted);
-      font-size: 0.8rem;
-      word-break: break-all;
-    }
-    a.button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0.5rem 0.8rem;
-      border-radius: 999px;
-      background: var(--accent);
-      color: #fff;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 0.88rem;
-    }
-    .empty, .error, .loading {
-      padding: 2rem;
-      text-align: center;
-      color: var(--muted);
-      border: 1px dashed var(--line);
-      border-radius: var(--radius);
-      background: rgba(255,252,246,0.7);
-    }
-    .error { color: #8a4b12; }
   </style>
 </head>
 <body>
   <div class="wrap">
+    <div class="brand-bar" aria-label="ZirconDS">
+      <div class="brand-mark" aria-hidden="true"></div>
+      <div>
+        <div class="brand-name">ZirconDS</div>
+        <div class="brand-tag">Pictures</div>
+      </div>
+    </div>
     <div class="topbar">
       <a class="back" href="/">← Back to verification</a>
     </div>
-    <h1 id="title">Property pictures</h1>
+    <h1 class="page-title" id="title">Property pictures</h1>
     <p class="sub" id="subtitle">Loading…</p>
-    <p class="note">Each Download link saves the image through the local verification server (CDN proxy).</p>
-    <div id="content" class="loading">Loading images…</div>
+    <p class="note">Images open through the verification proxy when needed; S3 links download directly.</p>
+    <div id="content" class="loading"><strong>Loading</strong>Fetching gallery…</div>
   </div>
   <script>
     function escapeHtml(value) {
@@ -137,7 +101,7 @@
     function filenameFromUrl(url, index) {
       try {
         const path = new URL(url).pathname;
-        const base = path.split("/").filter(Boolean).pop() || `image-${index + 1}`;
+        const base = path.split("/").filter(Boolean).pop() || `image-${index + 1}.jpg`;
         return base.includes(".") ? base : `${base}.jpg`;
       } catch {
         return `image-${index + 1}.jpg`;
@@ -145,11 +109,11 @@
     }
 
     function proxyHref(url, filename) {
-      const params = new URLSearchParams({
-        url,
-        filename,
-      });
-      return `/proxy-image?${params.toString()}`;
+      const host = (() => {
+        try { return new URL(url).hostname; } catch { return ""; }
+      })();
+      if (host.includes("zircondsphotos.s3")) return url;
+      return `/proxy-image?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
     }
 
     async function boot() {
@@ -183,16 +147,16 @@
 
         if (!images.length) {
           content.className = "empty";
-          content.textContent = "No images were extracted for this property.";
+          content.innerHTML = "<strong>No images</strong>Nothing was extracted for this property.";
           return;
         }
 
-        content.className = "grid";
+        content.className = "dl-grid";
         content.innerHTML = images.map((url, i) => {
           const name = filenameFromUrl(url, i);
           const downloadUrl = proxyHref(url, name);
           return `
-            <article class="card">
+            <article class="dl-card">
               <img src="${escapeHtml(url)}" alt="Property image ${i + 1}" loading="lazy" />
               <div class="meta">
                 <span>${escapeHtml(name)}</span>

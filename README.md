@@ -163,11 +163,11 @@ python ui/serve.py
 
 Opens http://127.0.0.1:8765/
 
-- **Run scrape** — all registered sites; banner shows discovered / skipped / added / updated + per-site chips  
+- **ZirconDS brand bar** + scrape controls with live status banner  
 - **All saved** / **Latest run** — archive vs last-run additions/updates  
-- **Source filter** — slice by `sourceSite` / `sources`  
-- **Select all** → **Copy selected JSON** (one click copies a pretty-printed JSON array) · **Preview export** to review first  
-- Site chips, filters, multi-word search, picture download  
+- Sticky **filters** (source, city, type, possession, price) + **Clear filters**  
+- **Select all** → **Copy selected JSON** (one click) · **Preview export** to review  
+- Expandable property cards, picture download page, keyboard **Esc** closes export modal  
 
 Production:
 
