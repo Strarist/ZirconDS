@@ -160,9 +160,15 @@ def _default_sites_csv() -> str:
         return "100acress,99acres,housing,magicbricks,squareyards"
 
 
-def ensure_data_from_s3() -> None:
-    """If local archive is missing, download from S3_DATA_URL or default bucket key."""
-    if DATA_FILE.is_file() and DATA_FILE.stat().st_size > 2:
+def ensure_data_from_s3(*, force: bool | None = None) -> None:
+    """If local archive is missing (or force), download from S3_DATA_URL / bucket."""
+    if force is None:
+        force = (os.environ.get("FORCE_S3_DATA_REFRESH") or "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+    if not force and DATA_FILE.is_file() and DATA_FILE.stat().st_size > 2:
         return
     url = (os.environ.get("S3_DATA_URL") or "").strip()
     if not url:

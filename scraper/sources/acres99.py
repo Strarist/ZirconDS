@@ -10,7 +10,7 @@ from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
-from scraper.fetch import Fetcher
+from scraper.fetch import Fetcher, is_challenge_body
 from scraper.normalize import (
     clean_rera_number,
     clean_text,
@@ -181,7 +181,7 @@ class Acres99Adapter(SourceAdapter):
                 logger.warning("99acres listing failed %s: %s", listing, exc)
                 blocked += 1
                 continue
-            if len(html) < 5000 or "Access Denied" in html:
+            if len(html) < 5000 or "Access Denied" in html or is_challenge_body(html):
                 logger.warning("99acres blocked/challenge for %s", listing)
                 blocked += 1
                 continue

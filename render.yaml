@@ -25,3 +25,5 @@ services:
         value: https://zircondsphotos.s3.ap-south-1.amazonaws.com/data/properties.json
       - key: S3_LATEST_URL
         value: https://zircondsphotos.s3.ap-south-1.amazonaws.com/data/latest.json
+      - key: FORCE_S3_DATA_REFRESH
+        value: "true"

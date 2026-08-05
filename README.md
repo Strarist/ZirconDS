@@ -212,6 +212,7 @@ Scraped JSON under `output/` is **gitignored** (except `output/.gitkeep`) so lar
 - Polite delay (~1.2s) between requests  
 - Fail-fast on 404 / 406; **403 → one mobile User-Agent retry** (unlocks 99acres)  
 - Soft-blocked sources log `blocked` in `scrape-run.json` and do not abort the run  
+- **99acres / Housing** often return WAF `403`/`417`/`406` from cloud IPs (e.g. Render); prefer local scrape then `python scripts/prepare_s3_public.py`  
 - Duplicate match-key groups are counted after merge for sanity logging
 
 ## Repo

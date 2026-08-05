@@ -225,8 +225,24 @@ def main(argv: list[str] | None = None) -> int:
                     site_stats["skippedNonProject"] += 1
                     stats["skippedNonProject"] += 1
                 except Exception as exc:
-                    logger.exception("Failed %s", url)
-                    append_error(errors_path, url, str(exc))
+                    msg = str(exc)
+                    soft = any(
+                        tok in msg
+                        for tok in (
+                            "417",
+                            "403",
+                            "406",
+                            "451",
+                            "Access Denied",
+                            "Challenge",
+                            "anti-bot",
+                        )
+                    )
+                    if soft:
+                        logger.warning("Blocked/failed %s: %s", url, exc)
+                    else:
+                        logger.exception("Failed %s", url)
+                    append_error(errors_path, url, msg)
                     site_stats["failed"] += 1
                     stats["failed"] += 1
             stats["perSite"][site] = site_stats
