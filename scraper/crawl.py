@@ -44,12 +44,27 @@ RESERVED_SLUGS = {
     "privacy-policy",
     "projects",
     "rental",
+    "resale",
     "search",
     "signup",
+    "site-map",
     "sitemap",
     "terms",
     "terms-and-conditions",
+    "testimonials",
+    "top-luxury-projects",
+    "luxury-projects",
 }
+
+# Slug substrings that indicate listing hubs / city aggregates, not project PDPs.
+NON_PROJECT_SLUG_MARKERS = (
+    "projects-in-",
+    "new-launch-projects-in-",
+    "-projects-in-",
+    "new-projects-in-",
+    "under-construction-projects-in-",
+    "ready-to-move-projects-in-",
+)
 
 EXCLUDED_PREFIXES = (
     "/projects/",
@@ -108,6 +123,21 @@ def _unescape_js_string(raw: str) -> str:
         return raw.replace(r"\/", "/").replace(r"\"", '"')
 
 
+def _is_non_project_slug(slug: str) -> bool:
+    """True when slug is a listing hub, city aggregate, or marketing page."""
+    if not slug:
+        return True
+    lowered = slug.lower()
+    if lowered in RESERVED_SLUGS:
+        return True
+    if lowered.startswith("projects-in-"):
+        return True
+    for marker in NON_PROJECT_SLUG_MARKERS:
+        if marker in lowered:
+            return True
+    return False
+
+
 def normalize_project_url(href: str, base: str = BASE_URL) -> str | None:
     if not href:
         return None
@@ -134,7 +164,7 @@ def normalize_project_url(href: str, base: str = BASE_URL) -> str | None:
     if not PROJECT_PATH_RE.match(path):
         return None
     slug = path.strip("/").lower()
-    if slug in RESERVED_SLUGS or slug.startswith("projects-in-"):
+    if _is_non_project_slug(slug):
         return None
     if not path.endswith("/"):
         path = path + "/"

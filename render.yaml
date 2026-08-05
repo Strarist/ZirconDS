@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: zirconds
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python ui/serve.py --host 0.0.0.0 --port $PORT --no-open
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: HOST
+        value: "0.0.0.0"
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        value: ap-south-1
+      - key: AWS_S3_BUCKET
+        value: zircondsphotos
+      - key: S3_DATA_URL
+        value: https://zircondsphotos.s3.ap-south-1.amazonaws.com/data/properties.json
+      - key: S3_LATEST_URL
+        value: https://zircondsphotos.s3.ap-south-1.amazonaws.com/data/latest.json

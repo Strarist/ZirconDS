@@ -1,0 +1,31 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "outputDirectory": "ui",
+  "rewrites": [
+    {
+      "source": "/data/:path*",
+      "destination": "https://REPLACE_WITH_RENDER_URL/data/:path*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://REPLACE_WITH_RENDER_URL/api/:path*"
+    },
+    {
+      "source": "/proxy-image",
+      "destination": "https://REPLACE_WITH_RENDER_URL/proxy-image"
+    },
+    {
+      "source": "/healthz",
+      "destination": "https://REPLACE_WITH_RENDER_URL/healthz"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=60" }
+      ]
+    }
+  ]
+}

@@ -12,7 +12,7 @@ from typing import Any
 from scraper.fetch import Fetcher
 from scraper.schema import SCHEMA_KEYS, validate_record
 from scraper.sources.acres99 import Acres99Adapter
-from scraper.sources.acress100 import Acress100Adapter
+from scraper.sources.acress100 import Acress100Adapter, NonProjectPageError
 from scraper.sources.housing import HousingAdapter
 from scraper.sources.magicbricks import MagicBricksAdapter
 from scraper.sources.squareyards import SquareYardsAdapter
@@ -139,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         "sites": sites,
         "discovered": 0,
         "skippedKnown": 0,
+        "skippedNonProject": 0,
         "scraped": 0,
         "failed": 0,
         "added": 0,
@@ -155,6 +156,7 @@ def main(argv: list[str] | None = None) -> int:
             site_stats = {
                 "discovered": 0,
                 "skippedKnown": 0,
+                "skippedNonProject": 0,
                 "scraped": 0,
                 "failed": 0,
                 "units": 0,
@@ -217,6 +219,11 @@ def main(argv: list[str] | None = None) -> int:
                     site_stats["units"] += len(unit_records)
                     stats["scraped"] += 1
                     logger.info("  -> %s unit record(s)", len(unit_records))
+                except NonProjectPageError as exc:
+                    logger.warning("Skipping non-project page %s: %s", url, exc)
+                    append_error(errors_path, url, str(exc))
+                    site_stats["skippedNonProject"] += 1
+                    stats["skippedNonProject"] += 1
                 except Exception as exc:
                     logger.exception("Failed %s", url)
                     append_error(errors_path, url, str(exc))
@@ -248,9 +255,16 @@ def main(argv: list[str] | None = None) -> int:
         logger.warning("Archive has %s duplicate match-key group(s)", dup_keys)
 
     if len(added) == 0 and len(updated) == 0:
+        detail_parts = [
+            f"{stats['skippedKnown']} known skipped",
+            f"{stats['discovered']} discovered",
+        ]
+        if stats["skippedNonProject"]:
+            detail_parts.append(f"{stats['skippedNonProject']} non-project skipped")
+        if stats["failed"]:
+            detail_parts.append(f"{stats['failed']} failed")
         stats["message"] = (
-            f"No new projects found ({stats['skippedKnown']} known skipped, "
-            f"{stats['discovered']} discovered across {', '.join(sites)})"
+            f"No new projects found ({', '.join(detail_parts)} across {', '.join(sites)})"
         )
     else:
         stats["message"] = (

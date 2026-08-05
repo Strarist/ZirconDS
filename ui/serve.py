@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import os
 import re
 import subprocess
 import sys
@@ -24,10 +25,18 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent.parent
 UI_DIR = Path(__file__).resolve().parent
-DATA_FILE = ROOT / "output" / "properties.json"
-LATEST_FILE = ROOT / "output" / "latest.json"
-RUN_FILE = ROOT / "output" / "scrape-run.json"
-STATUS_FILE = ROOT / "output" / "scrape-status.json"
+
+
+def _env_path(name: str, default: Path) -> Path:
+    raw = (os.environ.get(name) or "").strip()
+    return Path(raw) if raw else default
+
+
+DATA_DIR = _env_path("DATA_DIR", ROOT / "output")
+DATA_FILE = DATA_DIR / "properties.json"
+LATEST_FILE = DATA_DIR / "latest.json"
+RUN_FILE = DATA_DIR / "scrape-run.json"
+STATUS_FILE = DATA_DIR / "scrape-status.json"
 DEFAULT_PORT = 8765
 LOG_TAIL_MAX = 80
 ALLOWED_IMAGE_HOSTS = (
@@ -51,6 +60,9 @@ ALLOWED_IMAGE_HOSTS = (
     "www.squareyards.com",
     "squareyards.com",
     "doc.squareyards.com",
+    "zircondsphotos.s3.ap-south-1.amazonaws.com",
+    "zircondsphotos.s3.amazonaws.com",
+    "s3.ap-south-1.amazonaws.com",
 )
 
 _job_lock = threading.Lock()
@@ -68,6 +80,10 @@ _status: dict[str, Any] = {
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _cors_origin() -> str:
+    return (os.environ.get("CORS_ORIGIN") or "*").strip() or "*"
 
 
 def _persist_status() -> None:
@@ -144,6 +160,39 @@ def _default_sites_csv() -> str:
         return "100acress,99acres,housing,magicbricks,squareyards"
 
 
+def ensure_data_from_s3() -> None:
+    """If local archive is missing, download from S3_DATA_URL or default bucket key."""
+    if DATA_FILE.is_file() and DATA_FILE.stat().st_size > 2:
+        return
+    url = (os.environ.get("S3_DATA_URL") or "").strip()
+    if not url:
+        bucket = (os.environ.get("AWS_S3_BUCKET") or "").strip()
+        region = (os.environ.get("AWS_REGION") or "ap-south-1").strip()
+        if not bucket:
+            return
+        url = f"https://{bucket}.s3.{region}.amazonaws.com/data/properties.json"
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        req = Request(url, headers={"User-Agent": "ZirconDS-boot/1.0"})
+        with urlopen(req, timeout=120) as resp:
+            DATA_FILE.write_bytes(resp.read())
+        print(f"Downloaded archive from {url} -> {DATA_FILE}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Could not bootstrap archive from {url}: {exc}", file=sys.stderr)
+
+    latest_url = (os.environ.get("S3_LATEST_URL") or "").strip()
+    if not latest_url and url.endswith("/properties.json"):
+        latest_url = url[: -len("/properties.json")] + "/latest.json"
+    if latest_url and not LATEST_FILE.is_file():
+        try:
+            req = Request(latest_url, headers={"User-Agent": "ZirconDS-boot/1.0"})
+            with urlopen(req, timeout=60) as resp:
+                LATEST_FILE.write_bytes(resp.read())
+            print(f"Downloaded latest from {latest_url} -> {LATEST_FILE}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"Could not bootstrap latest.json: {exc}", file=sys.stderr)
+
+
 def start_scrape() -> tuple[int, dict[str, Any]]:
     """Start scraper subprocess. Returns (http_status, body)."""
     global _process
@@ -157,6 +206,7 @@ def start_scrape() -> tuple[int, dict[str, Any]]:
 
         _log_lines.clear()
         sites = _default_sites_csv()
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
         cmd = [
             sys.executable,
             "-m",
@@ -265,9 +315,31 @@ class VerificationHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, directory: str | None = None, **kwargs):
         super().__init__(*args, directory=directory, **kwargs)
 
+    def end_headers(self) -> None:
+        origin = _cors_origin()
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        super().end_headers()
+
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        self.send_response(204)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
+        if path in {"/health", "/healthz"}:
+            self._json_response(
+                200,
+                {
+                    "ok": True,
+                    "archiveCount": _count_json_array(DATA_FILE),
+                    "dataExists": DATA_FILE.is_file(),
+                },
+            )
+            return
         if path == "/data/properties.json":
             self._serve_json_file(DATA_FILE)
             return
@@ -289,7 +361,6 @@ class VerificationHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         if path == "/api/scrape":
-            # Drain body if present
             length = int(self.headers.get("Content-Length") or 0)
             if length:
                 self.rfile.read(length)
@@ -358,14 +429,26 @@ class VerificationHandler(SimpleHTTPRequestHandler):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Serve the property verification UI")
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("HOST", "127.0.0.1"),
+        help="Bind host (use 0.0.0.0 on Render)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("PORT") or DEFAULT_PORT),
+        help="Bind port (Render sets PORT)",
+    )
     parser.add_argument(
         "--no-open",
         action="store_true",
         help="Do not open a browser tab automatically",
     )
     args = parser.parse_args()
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_data_from_s3()
 
     if STATUS_FILE.is_file():
         try:
@@ -390,7 +473,7 @@ def main() -> int:
     server = ThreadingHTTPServer((args.host, args.port), handler)
     url = f"http://{args.host}:{args.port}/"
     print(f"Verification UI: {url}")
-    print(f"Data file: {DATA_FILE}")
+    print(f"Data file: {DATA_FILE} (exists={DATA_FILE.is_file()})")
     if not args.no_open:
         webbrowser.open(url)
     try:
