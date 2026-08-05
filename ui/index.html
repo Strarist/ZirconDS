@@ -474,7 +474,7 @@
       root.querySelectorAll("[data-copy]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const i = Number(btn.getAttribute("data-copy"));
-          copyText(JSON.stringify(publicRecord(state.filtered[i]), null, 2), "JSON copied");
+          copyText(JSON.stringify(publicRecord(state.filtered[i]), null, 2), "Copied property as JSON object");
         });
       });
       updateSelCount();
@@ -542,7 +542,12 @@
     }
 
     function formatSelectedJson(rows) {
-      return JSON.stringify(rows.map(publicRecord), null, 2);
+      const payload = rows.map(publicRecord);
+      // Integrators expect a bare object for one property; arrays only when exporting many.
+      if (payload.length === 1) {
+        return JSON.stringify(payload[0], null, 2);
+      }
+      return JSON.stringify(payload, null, 2);
     }
 
     async function copyText(text, okMessage) {
@@ -580,7 +585,10 @@
         return;
       }
       const text = formatSelectedJson(rows);
-      await copyText(text, `Copied ${rows.length} properties as JSON`);
+      const msg = rows.length === 1
+        ? "Copied 1 property as JSON object"
+        : `Copied ${rows.length} properties as JSON array`;
+      await copyText(text, msg);
     }
 
     function openExportDialog() {
@@ -589,7 +597,10 @@
         showToast("Select at least one property");
         return;
       }
-      document.getElementById("exportTitle").textContent = `${rows.length} properties selected`;
+      const label = rows.length === 1
+        ? "1 property (JSON object)"
+        : `${rows.length} properties (JSON array)`;
+      document.getElementById("exportTitle").textContent = label;
       document.getElementById("exportJson").textContent = formatSelectedJson(rows);
       document.getElementById("exportModal").classList.add("open");
     }

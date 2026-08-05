@@ -166,7 +166,8 @@ Opens http://127.0.0.1:8765/
 - **ZirconDS brand bar** + scrape controls with live status banner  
 - **All saved** / **Latest run** — archive vs last-run additions/updates  
 - Sticky **filters** (source, city, type, possession, price) + **Clear filters**  
-- **Select all** → **Copy selected JSON** (one click) · **Preview export** to review  
+- **Select all** → **Copy selected JSON** (one property → `{…}` object; several → `[…]` array) · **Preview export** to review  
+- Per-card **Copy JSON** always copies a single `{…}` object  
 - Expandable property cards, picture download page, keyboard **Esc** closes export modal  
 
 Production:
