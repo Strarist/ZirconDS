@@ -1,3 +1,18 @@
+# Secrets & local env
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.key
+credentials.json
+**/credentials.json
+.aws/
+secrets/
+*.secret
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -5,11 +20,29 @@ __pycache__/
 .venv/
 venv/
 env/
-.env
-output/*
-!output/.gitkeep
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Scrape output & local data (may contain operational dumps)
+output/*
+!output/.gitkeep
+
+# OS / editor
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# Logs & temp
+*.log
+*.tmp
+tmp/
+temp/
