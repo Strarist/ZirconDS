@@ -15,6 +15,7 @@ import mimetypes
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
@@ -130,26 +131,38 @@ def upload_bytes(
     body: bytes,
     content_type: str,
 ) -> None:
-    # Prefer ACL when the bucket allows it; fall back if ACLs are disabled.
-    try:
-        s3_client.put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=body,
-            ContentType=content_type,
-            ACL="public-read",
-        )
-    except Exception as exc:  # noqa: BLE001 — boto exception types vary by config
-        msg = str(exc).lower()
-        if "acl" in msg or "access control list" in msg or "blockpublicacl" in msg:
-            s3_client.put_object(
-                Bucket=bucket,
-                Key=key,
-                Body=body,
-                ContentType=content_type,
-            )
-        else:
-            raise
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            # Prefer ACL when the bucket allows it; fall back if ACLs are disabled.
+            try:
+                s3_client.put_object(
+                    Bucket=bucket,
+                    Key=key,
+                    Body=body,
+                    ContentType=content_type,
+                    ACL="public-read",
+                )
+            except Exception as exc:  # noqa: BLE001 — boto exception types vary by config
+                msg = str(exc).lower()
+                if "acl" in msg or "access control list" in msg or "blockpublicacl" in msg:
+                    s3_client.put_object(
+                        Bucket=bucket,
+                        Key=key,
+                        Body=body,
+                        ContentType=content_type,
+                    )
+                else:
+                    raise
+            # If we succeed, exit the retry loop
+            return
+        except Exception as e:
+            if attempt == max_attempts:
+                logger.error("Failed to upload %s after %d attempts: %s", key, max_attempts, e)
+                raise
+            sleep_time = 2 ** (attempt - 1)
+            logger.warning("Upload failed for %s (attempt %d/%d): %s. Retrying in %ds...", key, attempt, max_attempts, e, sleep_time)
+            time.sleep(sleep_time)
 
 
 def process_url(

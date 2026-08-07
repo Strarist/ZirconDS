@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
@@ -98,8 +99,16 @@ def load_records(path: Path) -> list[dict[str, Any]]:
 
 
 def write_records(path: Path, records: list[dict[str, Any]]) -> None:
+    """Atomically write records to path (write-to-tmp then os.replace).
+
+    This guarantees that a crash or KeyboardInterrupt during write never leaves
+    a partially-written / corrupt JSON file. Readers always see either the
+    complete previous file or the complete new file.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(records, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(records, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def latest_path_for(out_path: Path) -> Path:

@@ -62,7 +62,9 @@ CITY_ALIASES = {
     "bangalore": "Bangalore",
     "bombay": "Mumbai",
     "new delhi": "Delhi",
-    "ncr": "Delhi",
+    # NOTE: "ncr" is intentionally NOT mapped to "Delhi".
+    # NCR (National Capital Region) encompasses Gurgaon, Noida, Faridabad etc.
+    # Mapping it to Delhi would break cross-source match keys for those cities.
 }
 
 SECTOR_RE = re.compile(r"\bSector\s*[\-]?\s*([0-9]+[A-Za-z]?)\b", re.I)
@@ -95,8 +97,14 @@ PRICE_ON_REQUEST = {
     "n/a",
 }
 
-# Site-wide default pin often reused when a project has no real map coords.
-PLACEHOLDER_COORDS = {(28.4595, 77.0266)}
+# Site-wide default pins reused by portals when a project has no real map coordinates.
+# Add new entries here as discovered; duplicates are avoided via the 1e-6 tolerance check
+# in sanitize_coords().
+PLACEHOLDER_COORDS = {
+    (28.4595, 77.0266),   # 100acress.com Gurgaon default
+    (28.5355, 77.3910),   # 99acres.com Noida default
+    (28.6139, 77.2090),   # Generic Delhi city-centre default (shared by several portals)
+}
 
 
 def clean_text(value: Optional[str]) -> Optional[str]:
@@ -225,6 +233,13 @@ def price_to_inr(value: Any, unit: Optional[str] = None) -> Optional[int]:
     """Convert numeric price + unit (Cr/Lakh) to integer INR.
 
     Returns None for call-for-price / on-request strings — never invent a number.
+
+    Input contract for the ``unit``-less heuristic path:
+    - 100acress RSC payloads embed prices as small floats representing Crore
+      (e.g. ``2.5`` meaning ₹2.5 Cr). Any bare number < 1000 is therefore
+      assumed to be in Crore.
+    - Bare integers ≥ 1000 are assumed to be already in full INR rupees.
+    - When ``unit`` is provided it always takes precedence over this heuristic.
     """
     if value is None or value == "":
         return None

@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://zircon-ds-alpha.vercel.app/"><img alt="Vercel" src="https://img.shields.io/badge/live-Vercel-000000?style=flat-square" /></a>
   <a href="https://zirconds.onrender.com/"><img alt="Render" src="https://img.shields.io/badge/api-Render-46E3B7?style=flat-square" /></a>
-  <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-0f6b4c?style=flat-square" />
+  <img alt="Python" src="https://img.shields.io/badge/python-3.12.8-0f6b4c?style=flat-square" />
   <img alt="Sources" src="https://img.shields.io/badge/sources-5-1c5f8a?style=flat-square" />
   <img alt="Schema" src="https://img.shields.io/badge/schema-stable-2a6f8f?style=flat-square" />
   <img alt="License" src="https://img.shields.io/badge/repo-private-5c6a63?style=flat-square" />
@@ -102,6 +102,16 @@ AWS_REGION=ap-south-1
 AWS_S3_BUCKET=zircondsphotos
 ```
 
+Optional — protects the scrape trigger endpoint:
+
+```env
+SCRAPE_API_KEY=           # set to any strong random string
+CORS_ORIGIN=*             # override for local dev; Render uses the Vercel origin
+```
+
+Set `SCRAPE_API_KEY` in Render's secret environment variables (dashboard → Environment).
+Localhost dev works without it (open mode with a startup warning).
+
 ## Scrape
 
 ```bash
@@ -125,8 +135,10 @@ python -m scraper --jsonl output/new.jsonl
 |------|------|
 | `output/properties.json` | Full **archive** (grows across runs) |
 | `output/latest.json` | Rows **added or updated** in the last run |
-| `output/scrape-run.json` | Stats: discovered / skipped / scraped / added / updated / perSite |
-| `output/errors.jsonl` | Per-URL failures (batch continues) |
+| `output/scrape-run.json` | Stats written by CLI: discovered / skipped / scraped / added / updated / perSite / runId |
+| `output/scrape-status.json` | UI runtime state written by `serve.py`: running / ok / error / logTail |
+| `output/errors.jsonl` | **Append-only** error log; each line has url / error / ts / runId (never deleted) |
+| `output/sample-5.json` | Reference sample (committed; not overwritten by scrapes) |
 
 **Match key:** `project|city|locality|bhk|superBuiltUpArea`  
 **Loose match** when area is missing on one side → fill nulls carefully.  

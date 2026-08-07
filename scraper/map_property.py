@@ -1,4 +1,9 @@
-"""Map 100acress project + BHK row into the website property schema."""
+"""Map 100acress RSC project payload + BHK row into the canonical property schema.
+
+NOTE: This module is specific to the 100acress data shape (React Server Components flight
+payloads). It is used exclusively by Acress100Adapter and should not be called by other
+source adapters.
+"""
 
 from __future__ import annotations
 

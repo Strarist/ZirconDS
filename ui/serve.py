@@ -35,10 +35,26 @@ def _env_path(name: str, default: Path) -> Path:
 DATA_DIR = _env_path("DATA_DIR", ROOT / "output")
 DATA_FILE = DATA_DIR / "properties.json"
 LATEST_FILE = DATA_DIR / "latest.json"
+
+# scrape-run.json  — written by the scraper CLI; contains stats (discovered/scraped/added/updated).
+# scrape-status.json — written by THIS server; contains UI runtime state (running/ok/error, logTail).
+# They are separate so a CLI scrape (no server) still produces scrape-run.json without stomping
+# the server's live status.
 RUN_FILE = DATA_DIR / "scrape-run.json"
 STATUS_FILE = DATA_DIR / "scrape-status.json"
 DEFAULT_PORT = 8765
 LOG_TAIL_MAX = 80
+
+# ---------------------------------------------------------------------------
+# Rate limiter (in-memory, per remote IP) for POST /api/scrape
+# Protects against scrape-flood even if SCRAPE_API_KEY is leaked.
+# ---------------------------------------------------------------------------
+import time as _time
+from collections import defaultdict as _defaultdict
+
+_RATE_LIMIT_MAX = 5           # max POSTs per window
+_RATE_LIMIT_WINDOW = 60.0     # seconds
+_rate_hits: dict[str, list[float]] = _defaultdict(list)
 ALLOWED_IMAGE_HOSTS = (
     "cdn.100acress.com",
     "dqtkvjsm31k64.cloudfront.net",
@@ -370,6 +386,25 @@ class VerificationHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
             if length:
                 self.rfile.read(length)
+
+            # --- API key auth (Fix 11) ---
+            api_key = (os.environ.get("SCRAPE_API_KEY") or "").strip()
+            if api_key:
+                auth = (self.headers.get("Authorization") or "").strip()
+                expected = f"Bearer {api_key}"
+                if auth != expected:
+                    self._json_response(401, {"error": "Unauthorized: missing or invalid SCRAPE_API_KEY"})
+                    return
+
+            # --- Per-IP rate limiter (Arch-2) ---
+            client_ip = (self.headers.get("X-Forwarded-For") or self.client_address[0] or "unknown").split(",")[0].strip()
+            now = _time.monotonic()
+            _rate_hits[client_ip] = [t for t in _rate_hits[client_ip] if now - t < _RATE_LIMIT_WINDOW]
+            if len(_rate_hits[client_ip]) >= _RATE_LIMIT_MAX:
+                self._json_response(429, {"error": "Too many requests. Please wait before triggering another scrape."})
+                return
+            _rate_hits[client_ip].append(now)
+
             code, body = start_scrape()
             self._json_response(code, body)
             return
@@ -454,6 +489,28 @@ def main() -> int:
     args = parser.parse_args()
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    # --- Startup env validation (Arch-8) ---
+    _required_env = []  # none strictly required for serve to start
+    _optional_env = {
+        "AWS_ACCESS_KEY_ID": "S3 photo upload and archive bootstrap",
+        "AWS_SECRET_ACCESS_KEY": "S3 photo upload and archive bootstrap",
+        "AWS_S3_BUCKET": "S3 bucket name",
+        "SCRAPE_API_KEY": "POST /api/scrape auth (unset = open, set = Bearer token required)",
+        "CORS_ORIGIN": "Allowed CORS origin (default=*)",
+        "S3_DATA_URL": "Direct S3 URL for archive bootstrap on boot",
+    }
+    for key, purpose in _optional_env.items():
+        val = (os.environ.get(key) or "").strip()
+        if not val:
+            print(f"[CONFIG] {key} not set — {purpose}", file=sys.stderr)
+    if not (os.environ.get("SCRAPE_API_KEY") or "").strip():
+        print(
+            "[SECURITY WARNING] SCRAPE_API_KEY is not set. "
+            "POST /api/scrape is open to any caller. Set it in Render secrets.",
+            file=sys.stderr,
+        )
+
     ensure_data_from_s3()
 
     if STATUS_FILE.is_file():

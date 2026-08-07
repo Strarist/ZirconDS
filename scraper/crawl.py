@@ -1,4 +1,9 @@
-"""Discover project URLs from 100acress listing pages."""
+"""Discover project URLs from 100acress.com listing pages.
+
+NOTE: This crawler is specific to 100acress.com URL patterns (Next.js RSC payloads, path
+shapes, pagination). It is used exclusively by Acress100Adapter. Do not import this module
+for other source adapters.
+"""
 
 from __future__ import annotations
 

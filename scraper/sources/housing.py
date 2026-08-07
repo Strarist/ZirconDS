@@ -108,25 +108,30 @@ class HousingAdapter(SourceAdapter):
                 if not isinstance(cfg, dict):
                     continue
                 bhk = parse_bhk(cfg.get("apartment_type") or cfg.get("bhk") or cfg.get("title"))
-                area = parse_area(cfg.get("carpet_area") or cfg.get("area") or cfg.get("built_up_area"))
+                # carpet_area and built_up_area are distinct measurements.
+                # Do NOT assign the same value to both fields — it corrupts the cross-source
+                # match key which is keyed on superBuiltUpArea.
+                carpet = parse_area(cfg.get("carpet_area"))
+                super_area = parse_area(cfg.get("built_up_area") or cfg.get("super_built_up_area"))
                 price = cfg.get("price")
                 try:
                     price_i = int(float(price)) if price is not None else None
                 except (TypeError, ValueError):
                     price_i = None
-                unit_rows.append((bhk, area, price_i))
+                unit_rows.append((bhk, carpet, super_area, price_i))
         if not unit_rows:
-            unit_rows = [(None, None, None)]
+            unit_rows = [(None, None, None, None)]
 
         slug_base = slugify(urlparse(url).path.strip("/") or project_name)
         records: list[dict[str, Any]] = []
         used: set[str] = set()
-        for bhk, area, price in unit_rows:
+        for bhk, carpet, super_area, price in unit_rows:
+            area_for_slug = super_area if super_area is not None else carpet
             slug = slug_base
             if bhk:
                 slug = f"{slug_base}-{bhk}bhk"
-            if area:
-                slug = f"{slug}-{area}sqft"
+            if area_for_slug:
+                slug = f"{slug}-{area_for_slug}sqft"
             candidate = slug
             n = 2
             while candidate in used:
@@ -147,8 +152,8 @@ class HousingAdapter(SourceAdapter):
                     "locality": locality,
                     "address": ", ".join(x for x in (locality, city) if x) or None,
                     "bhk": bhk,
-                    "carpetArea": area,
-                    "superBuiltUpArea": area,
+                    "carpetArea": carpet,
+                    "superBuiltUpArea": super_area,  # None when only carpet is known
                     "price": price,
                     "reraNumber": rera_number,
                     "reraState": derive_rera_state(rera_number),

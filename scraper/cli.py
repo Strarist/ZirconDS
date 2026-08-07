@@ -6,6 +6,8 @@ import argparse
 import json
 import logging
 import sys
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -53,10 +55,18 @@ def write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def append_error(path: Path, url: str, error: str) -> None:
+def append_error(path: Path, url: str, error: str, run_id: str = "") -> None:
+    """Append an error entry to the error log (never truncates — append-only)."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    entry: dict[str, Any] = {
+        "url": url,
+        "error": error,
+        "ts": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    }
+    if run_id:
+        entry["runId"] = run_id
     with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps({"url": url, "error": error}, ensure_ascii=False) + "\n")
+        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
 def parse_sites(raw: str) -> list[str]:
@@ -122,10 +132,13 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
+    run_id = str(uuid.uuid4())[:8]  # short 8-char prefix is enough for log correlation
+    logger.info("Run ID: %s", run_id)
+
     sites = parse_sites(args.sites)
     errors_path = Path(args.errors)
-    if errors_path.exists():
-        errors_path.unlink()
+    # errors.jsonl is append-only across runs; each line carries a timestamp + runId.
+    # Do NOT delete it here — history is preserved intentionally.
 
     out_path = Path(args.out)
     latest_path = latest_path_for(out_path)
@@ -152,7 +165,14 @@ def main(argv: list[str] | None = None) -> int:
     with Fetcher(delay=args.delay) as fetcher:
         for site in sites:
             adapter_cls = ADAPTERS[site]
-            adapter = adapter_cls(category=args.category) if site == "100acress" else adapter_cls()
+            # All adapters accept category= (base class guarantees it); only 100acress uses it.
+            adapter = adapter_cls(category=args.category)
+            if args.category != "all" and site != "100acress":
+                logger.warning(
+                    "[%s] --category=%s is ignored for this source (only 100acress uses it)",
+                    site,
+                    args.category,
+                )
             site_stats = {
                 "discovered": 0,
                 "skippedKnown": 0,
@@ -163,7 +183,8 @@ def main(argv: list[str] | None = None) -> int:
                 "blocked": False,
             }
             try:
-                urls = adapter.discover(fetcher, max_projects=None)
+                # FIX: pass max_projects so discovery is capped early (saves HTTP requests)
+                urls = adapter.discover(fetcher, max_projects=args.max_projects)
             except Exception as exc:
                 logger.exception("Discovery failed for %s: %s", site, exc)
                 stats["perSite"][site] = {**site_stats, "error": str(exc), "blocked": True}
@@ -222,7 +243,7 @@ def main(argv: list[str] | None = None) -> int:
                     logger.info("  -> %s unit record(s)", len(unit_records))
                 except NonProjectPageError as exc:
                     logger.warning("Skipping non-project page %s: %s", url, exc)
-                    append_error(errors_path, url, str(exc))
+                    append_error(errors_path, url, str(exc), run_id=run_id)
                     site_stats["skippedNonProject"] += 1
                     stats["skippedNonProject"] += 1
                 except Exception as exc:
@@ -243,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
                         logger.warning("Blocked/failed %s: %s", url, exc)
                     else:
                         logger.exception("Failed %s", url)
-                    append_error(errors_path, url, msg)
+                    append_error(errors_path, url, msg, run_id=run_id)
                     site_stats["failed"] += 1
                     stats["failed"] += 1
             stats["perSite"][site] = site_stats
@@ -259,6 +280,7 @@ def main(argv: list[str] | None = None) -> int:
 
     stats["added"] = len(added)
     stats["updated"] = len(updated)
+    stats["runId"] = run_id
     # Sanity: duplicate match keys in archive
     keys = [match_key(r) for r in merged]
     key_counts: dict[str, int] = {}

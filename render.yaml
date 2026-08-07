@@ -12,7 +12,10 @@ services:
       - key: HOST
         value: "0.0.0.0"
       - key: CORS_ORIGIN
-        value: "*"
+        # Restrict to the known Vercel frontend. Use * only for local dev (override in .env).
+        value: "https://zircon-ds-alpha.vercel.app"
+      - key: SCRAPE_API_KEY
+        sync: false
       - key: AWS_ACCESS_KEY_ID
         sync: false
       - key: AWS_SECRET_ACCESS_KEY

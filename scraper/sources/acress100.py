@@ -81,7 +81,7 @@ class Acress100Adapter(SourceAdapter):
     site = "100acress"
 
     def __init__(self, category: str = "all") -> None:
-        self.category = category
+        super().__init__(category=category)
 
     def discover(self, fetcher: Fetcher, max_projects: int | None = None) -> list[str]:
         seed_list = _build_listing_seeds(self.category)
