@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 
 from scraper.fetch import Fetcher, is_challenge_body
 from scraper.normalize import (
+    clean_amenities,
     clean_rera_number,
     clean_text,
     derive_rera_state,
@@ -289,13 +290,14 @@ class Acres99Adapter(SourceAdapter):
         if not unit_rows:
             unit_rows = [(None, None, None, None)]
 
-        amenities: list[str] = []
+        amenities_raw: list[str] = []
         for m in re.finditer(r'"amenit(?:y|ies)Name"\s*:\s*"([^"]+)"', html, re.I):
             name = clean_text(m.group(1))
-            if name and name not in amenities:
-                amenities.append(name)
-            if len(amenities) >= 40:
+            if name and name not in amenities_raw:
+                amenities_raw.append(name)
+            if len(amenities_raw) >= 40:
                 break
+        amenities = clean_amenities(amenities_raw)
 
         slug_base = slugify(urlparse(url).path.strip("/") or project_name)
         records: list[dict[str, Any]] = []

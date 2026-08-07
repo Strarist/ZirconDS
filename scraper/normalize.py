@@ -67,6 +67,15 @@ CITY_ALIASES = {
     # Mapping it to Delhi would break cross-source match keys for those cities.
 }
 
+# Cities expected by the destination Admin → Cities catalog on export/copy.
+EXPORT_CITY_ALIASES = {
+    "delhi": "Delhi NCR",
+    "new delhi": "Delhi NCR",
+}
+
+# UI scrapes often append "+21 More" style placeholders — never real amenities.
+AMENITY_JUNK_RE = re.compile(r"^\+\s*\d+\s*more$", re.I)
+
 SECTOR_RE = re.compile(r"\bSector\s*[\-]?\s*([0-9]+[A-Za-z]?)\b", re.I)
 PINCODE_RE = re.compile(r"\b([1-9][0-9]{5})\b")
 BHK_RE = re.compile(r"(\d+(?:\.\d+)?)\s*BHK", re.I)
@@ -153,6 +162,46 @@ def normalize_city(value: Optional[str]) -> Optional[str]:
         return None
     key = text.lower()
     return CITY_ALIASES.get(key, text.title() if text.islower() else text)
+
+
+def export_city(value: Optional[str]) -> Optional[str]:
+    """Map stored city names to destination Admin → Cities labels on export."""
+    text = clean_text(value)
+    if not text:
+        return None
+    return EXPORT_CITY_ALIASES.get(text.lower(), text)
+
+
+def clean_amenity_name(value: Any) -> Optional[str]:
+    """Return a real amenity label, or None for junk / empty placeholders."""
+    text = clean_text(str(value) if value is not None else None)
+    if not text:
+        return None
+    if AMENITY_JUNK_RE.match(text):
+        return None
+    return text
+
+
+def clean_amenities(values: Any) -> list[str]:
+    """Dedupe and strip amenity junk like '+22 More'."""
+    if not isinstance(values, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in values:
+        if isinstance(item, dict):
+            raw = item.get("name") or item.get("title") or item.get("label")
+        else:
+            raw = item
+        name = clean_amenity_name(raw)
+        if not name:
+            continue
+        key = name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(name)
+    return out
 
 
 def map_property_type(raw: Optional[str]) -> Optional[str]:

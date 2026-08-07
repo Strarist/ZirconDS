@@ -504,6 +504,35 @@
       "highlights", "locationAdvantages", "whyInvest", "whyConsider", "addressSection", "faqs",
     ];
 
+    const EXPORT_CITY_ALIASES = {
+      delhi: "Delhi NCR",
+      "new delhi": "Delhi NCR",
+    };
+
+    function exportCity(city) {
+      if (city == null || city === "") return city == null ? null : "";
+      const key = String(city).trim().toLowerCase();
+      return EXPORT_CITY_ALIASES[key] || String(city).trim();
+    }
+
+    function cleanAmenities(list) {
+      if (!Array.isArray(list)) return [];
+      const out = [];
+      const seen = new Set();
+      for (const item of list) {
+        const raw = typeof item === "string"
+          ? item
+          : (item && (item.name || item.title || item.label)) || "";
+        const name = String(raw || "").replace(/\s+/g, " ").trim();
+        if (!name || /^\+\s*\d+\s*more$/i.test(name)) continue;
+        const key = name.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(name);
+      }
+      return out;
+    }
+
     function coerceExportImages(record) {
       const raw = Array.isArray(record.images) && record.images.length
         ? record.images
@@ -530,6 +559,10 @@
       for (const key of PUBLIC_SCHEMA_KEYS) {
         if (key === "images") {
           out.images = coerceExportImages(record);
+        } else if (key === "amenities") {
+          out.amenities = cleanAmenities(record.amenities);
+        } else if (key === "city") {
+          out.city = exportCity(Object.prototype.hasOwnProperty.call(record, "city") ? record.city : null);
         } else if (Object.prototype.hasOwnProperty.call(record, key)) {
           out[key] = record[key];
         } else {

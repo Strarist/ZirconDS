@@ -182,22 +182,10 @@ def resolve_highlights(project: dict[str, Any]) -> list[str]:
 
 
 def resolve_amenities(project: dict[str, Any]) -> list[str]:
+    from scraper.normalize import clean_amenities
+
     amenities = project.get("Amenities") or project.get("amenities") or []
-    if not isinstance(amenities, list):
-        return []
-    out: list[str] = []
-    seen: set[str] = set()
-    for item in amenities:
-        if isinstance(item, str):
-            name = item.strip()
-        elif isinstance(item, dict):
-            name = str(item.get("name") or item.get("title") or "").strip()
-        else:
-            continue
-        if name and name not in seen:
-            seen.add(name)
-            out.append(name)
-    return out
+    return clean_amenities(amenities)
 
 
 def location_blurbs(project: dict[str, Any]) -> list[str]:

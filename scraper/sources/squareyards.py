@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 
 from scraper.fetch import Fetcher
 from scraper.normalize import (
+    clean_amenities,
     clean_rera_number,
     clean_text,
     derive_rera_state,
@@ -207,13 +208,14 @@ class SquareYardsAdapter(SourceAdapter):
             if len(image_urls) >= 12:
                 break
 
-        amenities: list[str] = []
+        amenities_raw: list[str] = []
         for li in soup.select("[class*=amenit] li, [class*=Amenit] li"):
             name = clean_text(li.get_text(" ", strip=True))
-            if name and name not in amenities:
-                amenities.append(name)
-            if len(amenities) >= 40:
+            if name and name not in amenities_raw:
+                amenities_raw.append(name)
+            if len(amenities_raw) >= 40:
                 break
+        amenities = clean_amenities(amenities_raw)
 
         unit_rows = extract_unit_rows(html)
         if not unit_rows:

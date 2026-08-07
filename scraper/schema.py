@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from scraper.normalize import clean_amenities, export_city
+
+
 SCHEMA_KEYS: list[str] = [
     "title",
     "slug",
@@ -193,10 +196,12 @@ def ensure_schema(record: dict[str, Any]) -> dict[str, Any]:
             [u for u in (incoming.get("imageUrls") or []) if isinstance(u, str)]
         )
     incoming["images"] = images
+    incoming["amenities"] = clean_amenities(incoming.get("amenities"))
 
     base.update(incoming)
     out = {key: base.get(key) for key in SCHEMA_KEYS}
     out["images"] = coerce_images(out.get("images"))
+    out["amenities"] = clean_amenities(out.get("amenities"))
 
     for key in VERIFICATION_KEYS:
         if key in record and record[key] is not None:
@@ -207,7 +212,10 @@ def ensure_schema(record: dict[str, Any]) -> dict[str, Any]:
 def public_record(record: dict[str, Any]) -> dict[str, Any]:
     """Schema-only record for integrations / export (no verification extras)."""
     ensured = ensure_schema(record)
-    return {key: ensured.get(key) for key in SCHEMA_KEYS}
+    out = {key: ensured.get(key) for key in SCHEMA_KEYS}
+    out["city"] = export_city(out.get("city"))
+    out["amenities"] = clean_amenities(out.get("amenities"))
+    return out
 
 
 def validate_record(record: dict[str, Any]) -> list[str]:
