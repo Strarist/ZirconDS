@@ -368,6 +368,25 @@ a:focus:not(:focus-visible) {
   margin-bottom: 0.75rem;
 }
 
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+  margin: 1rem 0 2rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.pager[hidden] {
+  display: none !important;
+}
+
+.pager button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .list { display: grid; gap: 0.7rem; }
 .list.latest-mode details.card {
   border-color: color-mix(in srgb, var(--new) 28%, var(--line));

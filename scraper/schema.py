@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from scraper.normalize import clean_amenities, export_city
+from scraper.normalize import (
+    clean_amenities,
+    export_city,
+    map_possession_status,
+    map_property_type,
+)
 
 
 SCHEMA_KEYS: list[str] = [
@@ -215,6 +220,12 @@ def public_record(record: dict[str, Any]) -> dict[str, Any]:
     out = {key: ensured.get(key) for key in SCHEMA_KEYS}
     out["city"] = export_city(out.get("city"))
     out["amenities"] = clean_amenities(out.get("amenities"))
+    if out.get("propertyType"):
+        out["propertyType"] = map_property_type(out["propertyType"]) or out["propertyType"]
+    if out.get("possessionStatus"):
+        out["possessionStatus"] = (
+            map_possession_status(out["possessionStatus"]) or out["possessionStatus"]
+        )
     return out
 
 

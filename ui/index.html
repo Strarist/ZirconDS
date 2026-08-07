@@ -93,6 +93,12 @@
     <div class="list" id="list">
       <div class="loading"><strong>Loading archive</strong>Fetching properties…</div>
     </div>
+
+    <div class="pager" id="pager" hidden>
+      <button type="button" class="linkish secondary" id="pagePrev">Previous</button>
+      <span id="pageLabel">Page 1</span>
+      <button type="button" class="linkish secondary" id="pageNext">Next</button>
+    </div>
   </div>
 
   <button type="button" class="back-top" id="backTop" aria-label="Back to top" title="Back to top">↑</button>
@@ -118,9 +124,13 @@
     const COMMERCIAL_HINTS = ["commercial", "office", "shop", "retail", "sco"];
     const SEARCH_FIELDS = [
       "title", "projectName", "developer", "city", "locality", "slug",
-      "reraNumber", "address", "propertyType", "h1", "seoTitle",
+      "reraNumber", "address", "propertyType", "h1", "seoTitle", "sourceSite",
     ];
     const POLL_MS = 1500;
+    const PAGE_SIZE = 50;
+    const SEARCH_DEBOUNCE_MS = 180;
+    const BULK_IMPORT_MAX = 500;
+    const POSSESSION_UNKNOWN = "__unknown__";
 
     const state = {
       view: "all",
@@ -129,11 +139,13 @@
       records: [],
       filtered: [],
       selected: new Set(),
+      page: 0,
       latestScrapedAt: null,
       archiveCount: 0,
       latestCount: 0,
       scrapeState: "idle",
       pollTimer: null,
+      searchTimer: null,
       lastFinishedKey: null,
       lastRun: null,
     };
@@ -158,12 +170,19 @@
 
     function updateSelCount() {
       const n = state.selected.size;
-      document.getElementById("selCount").textContent = `${n} selected`;
-      const allBox = document.getElementById("selectAll");
       const keys = state.filtered.map(recordKey);
-      const allOn = keys.length > 0 && keys.every((k) => state.selected.has(k));
+      const selectedInFilter = keys.filter((k) => state.selected.has(k)).length;
+      const hidden = n - selectedInFilter;
+      const selEl = document.getElementById("selCount");
+      if (hidden > 0) {
+        selEl.textContent = `${n} selected · ${hidden} hidden by filters`;
+      } else {
+        selEl.textContent = `${n} selected`;
+      }
+      const allBox = document.getElementById("selectAll");
+      const allOn = keys.length > 0 && selectedInFilter === keys.length;
       allBox.checked = allOn;
-      allBox.indeterminate = n > 0 && !allOn;
+      allBox.indeterminate = selectedInFilter > 0 && selectedInFilter < keys.length;
       const hasSel = n > 0;
       document.getElementById("copySelectedBtn").disabled = !hasSel;
       document.getElementById("exportBtn").disabled = !hasSel;
@@ -171,7 +190,9 @@
       document.querySelectorAll("details.card").forEach((card) => {
         const box = card.querySelector("[data-sel]");
         if (!box) return;
-        card.classList.toggle("is-selected", box.checked);
+        const on = state.selected.has(box.getAttribute("data-sel"));
+        box.checked = on;
+        card.classList.toggle("is-selected", on);
       });
     }
 
@@ -314,34 +335,125 @@
       return sorted;
     }
 
-    function recordSources(r) {
-      return siteLabels(r);
-    }
-
     function recordMatchesSource(r, source) {
       if (!source) return true;
-      return recordSources(r).includes(source);
+      return siteLabels(r).includes(source);
     }
 
-    function applyFilters() {
-      const q = document.getElementById("search").value;
-      const source = document.getElementById("sourceFilter").value;
-      const type = document.getElementById("typeFilter").value;
-      const city = document.getElementById("cityFilter").value;
-      const possession = document.getElementById("possessionFilter").value;
-      const priceMode = document.getElementById("priceFilter").value;
+    function readFilters() {
+      return {
+        q: document.getElementById("search").value,
+        source: document.getElementById("sourceFilter").value,
+        type: document.getElementById("typeFilter").value,
+        city: document.getElementById("cityFilter").value,
+        possession: document.getElementById("possessionFilter").value,
+        priceMode: document.getElementById("priceFilter").value,
+      };
+    }
 
-      let rows = state.records.filter((r) => {
-        if (!recordMatchesSource(r, source)) return false;
-        if (type && r.propertyType !== type) return false;
-        if (city && r.city !== city) return false;
-        if (possession && r.possessionStatus !== possession) return false;
-        if (priceMode === "priced" && (r.price == null || r.price === "")) return false;
-        if (priceMode === "call" && !(r.price == null || r.price === "")) return false;
-        return matchesSearch(r, q);
-      });
+    function filtersActive(f) {
+      return Boolean(
+        (f.q && f.q.trim()) ||
+        f.source ||
+        f.type ||
+        f.city ||
+        f.possession ||
+        f.priceMode
+      );
+    }
 
+    function recordMatchesFilters(r, f, skip = null) {
+      if (skip !== "source" && !recordMatchesSource(r, f.source)) return false;
+      if (skip !== "type" && f.type && r.propertyType !== f.type) return false;
+      if (skip !== "city" && f.city && r.city !== f.city) return false;
+      if (skip !== "possession") {
+        if (f.possession === POSSESSION_UNKNOWN) {
+          if (r.possessionStatus != null && r.possessionStatus !== "") return false;
+        } else if (f.possession && r.possessionStatus !== f.possession) {
+          return false;
+        }
+      }
+      if (skip !== "price") {
+        if (f.priceMode === "priced" && (r.price == null || r.price === "")) return false;
+        if (f.priceMode === "call" && !(r.price == null || r.price === "")) return false;
+      }
+      if (skip !== "search" && !matchesSearch(r, f.q || "")) return false;
+      return true;
+    }
+
+    function refreshCascadingOptions(f) {
+      const base = state.records;
+      const forSource = base.filter((r) => recordMatchesFilters(r, f, "source"));
+      const forType = base.filter((r) => recordMatchesFilters(r, f, "type"));
+      const forCity = base.filter((r) => recordMatchesFilters(r, f, "city"));
+      const forPoss = base.filter((r) => recordMatchesFilters(r, f, "possession"));
+
+      fillSelect(
+        document.getElementById("sourceFilter"),
+        uniqueSorted(forSource.flatMap((r) => siteLabels(r))),
+        "All sources",
+      );
+      fillSelect(
+        document.getElementById("typeFilter"),
+        uniqueSorted(forType.map((r) => r.propertyType)),
+        "All types",
+      );
+      fillSelect(
+        document.getElementById("cityFilter"),
+        uniqueSorted(forCity.map((r) => r.city)),
+        "All cities",
+      );
+
+      const possSelect = document.getElementById("possessionFilter");
+      const possValues = uniqueSorted(forPoss.map((r) => r.possessionStatus));
+      const hasUnknown = forPoss.some((r) => r.possessionStatus == null || r.possessionStatus === "");
+      fillSelect(possSelect, possValues, "All possession");
+      if (hasUnknown) {
+        const opt = document.createElement("option");
+        opt.value = POSSESSION_UNKNOWN;
+        opt.textContent = "Unknown / empty";
+        // Insert after the "All" option
+        if (possSelect.options.length > 1) {
+          possSelect.insertBefore(opt, possSelect.options[1]);
+        } else {
+          possSelect.appendChild(opt);
+        }
+        if (f.possession === POSSESSION_UNKNOWN) possSelect.value = POSSESSION_UNKNOWN;
+      }
+    }
+
+    function pageCount() {
+      return Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE) || 1);
+    }
+
+    function updatePager() {
+      const pager = document.getElementById("pager");
+      const total = state.filtered.length;
+      const pages = pageCount();
+      if (state.page >= pages) state.page = Math.max(0, pages - 1);
+      if (total <= PAGE_SIZE) {
+        pager.hidden = true;
+        return;
+      }
+      pager.hidden = false;
+      const start = state.page * PAGE_SIZE + 1;
+      const end = Math.min(total, (state.page + 1) * PAGE_SIZE);
+      document.getElementById("pageLabel").textContent =
+        `${start}–${end} of ${total} · page ${state.page + 1}/${pages}`;
+      document.getElementById("pagePrev").disabled = state.page <= 0;
+      document.getElementById("pageNext").disabled = state.page >= pages - 1;
+    }
+
+    function applyFilters({ resetPage = true } = {}) {
+      let f = readFilters();
+      refreshCascadingOptions(f);
+      // Cascade may clear incompatible dropdowns — re-read after rebuild.
+      f = readFilters();
+
+      let rows = state.records.filter((r) => recordMatchesFilters(r, f));
       state.filtered = sortRecords(rows);
+      if (resetPage) state.page = 0;
+
       document.getElementById("resultCount").textContent =
         `${state.filtered.length} of ${state.records.length} records`;
       updateSelCount();
@@ -351,24 +463,21 @@
     function setView(view) {
       state.view = view;
       state.selected.clear();
+      state.page = 0;
       document.getElementById("viewAll").classList.toggle("active", view === "all");
       document.getElementById("viewLatest").classList.toggle("active", view === "latest");
       document.getElementById("list").classList.toggle("latest-mode", view === "latest");
       state.records = view === "latest" ? state.latest : state.archive;
       updateStats(state.records);
-      const sourceValues = uniqueSorted(state.records.flatMap((r) => siteLabels(r)));
-      fillSelect(document.getElementById("sourceFilter"), sourceValues, "All sources");
-      fillSelect(document.getElementById("typeFilter"), uniqueSorted(state.records.map((r) => r.propertyType)), "All types");
-      fillSelect(document.getElementById("cityFilter"), uniqueSorted(state.records.map((r) => r.city)), "All cities");
-      fillSelect(document.getElementById("possessionFilter"), uniqueSorted(state.records.map((r) => r.possessionStatus)), "All possession");
       document.getElementById("dataHint").textContent =
         view === "latest" ? "Showing output/latest.json" : "Showing output/properties.json archive";
-      applyFilters();
+      applyFilters({ resetPage: true });
     }
 
     function renderList() {
       const root = document.getElementById("list");
       if (!state.records.length) {
+        document.getElementById("pager").hidden = true;
         if (state.view === "latest") {
           const skip = (state.lastRun && state.lastRun.skippedKnown) || 0;
           root.innerHTML = `<div class="empty"><strong>Nothing new this run</strong>No added/updated properties${skip ? ` (${skip} known URLs skipped)` : ""}. The archive is unchanged.</div>`;
@@ -381,12 +490,17 @@
         return;
       }
       if (!state.filtered.length) {
+        document.getElementById("pager").hidden = true;
         root.innerHTML = `<div class="empty"><strong>No matches</strong>Try clearing filters or broadening your search.</div>`;
         updateSelCount();
         return;
       }
 
-      root.innerHTML = state.filtered.map((r, idx) => {
+      updatePager();
+      const start = state.page * PAGE_SIZE;
+      const pageRows = state.filtered.slice(start, start + PAGE_SIZE);
+
+      root.innerHTML = pageRows.map((r, idx) => {
         const amenities = Array.isArray(r.amenities) ? r.amenities : [];
         const highlights = Array.isArray(r.highlights) ? r.highlights : [];
         const faqs = Array.isArray(r.faqs) ? r.faqs : [];
@@ -399,6 +513,7 @@
         const priceClass = r.price == null ? "price muted-price" : "price";
         const neu = isNewRecord(r);
         const key = recordKey(r);
+        const absoluteIndex = start + idx;
         const checked = state.selected.has(key) ? " checked" : "";
         const selectedCls = state.selected.has(key) ? " is-selected" : "";
         const sites = siteLabels(r);
@@ -454,7 +569,7 @@
               <div class="actions">
                 <a class="button" href="${escapeAttr(downloadHref)}">Download pictures</a>
                 <a class="button secondary" href="${escapeAttr(source)}" target="_blank" rel="noopener noreferrer">Open source page</a>
-                <button type="button" class="linkish secondary" data-copy="${idx}">Copy JSON</button>
+                <button type="button" class="linkish secondary" data-copy="${absoluteIndex}">Copy JSON</button>
               </div>
             </div>
           </details>
@@ -509,10 +624,37 @@
       "new delhi": "Delhi NCR",
     };
 
+    const EXPORT_TYPE_ALIASES = {
+      "commercial property": "Commercial",
+      "independent floors": "Independent Floor",
+      "sco plots": "SCO",
+      "sco plot": "SCO",
+      "deen dayal plots": "Plot",
+    };
+
+    const EXPORT_POSSESSION_ALIASES = {
+      upcoming: "NEW_LAUNCH",
+      "new launch": "NEW_LAUNCH",
+      newlaunch: "NEW_LAUNCH",
+    };
+
     function exportCity(city) {
       if (city == null || city === "") return city == null ? null : "";
       const key = String(city).trim().toLowerCase();
       return EXPORT_CITY_ALIASES[key] || String(city).trim();
+    }
+
+    function exportPropertyType(type) {
+      if (type == null || type === "") return type == null ? null : "";
+      const key = String(type).trim().toLowerCase();
+      return EXPORT_TYPE_ALIASES[key] || String(type).trim();
+    }
+
+    function exportPossession(status) {
+      if (status == null || status === "") return status == null ? null : "";
+      const key = String(status).trim().toLowerCase().replace(/[-\s]+/g, " ");
+      if (EXPORT_POSSESSION_ALIASES[key]) return EXPORT_POSSESSION_ALIASES[key];
+      return String(status).trim().toUpperCase().replace(/\s+/g, "_");
     }
 
     function cleanAmenities(list) {
@@ -563,6 +705,14 @@
           out.amenities = cleanAmenities(record.amenities);
         } else if (key === "city") {
           out.city = exportCity(Object.prototype.hasOwnProperty.call(record, "city") ? record.city : null);
+        } else if (key === "propertyType") {
+          out.propertyType = exportPropertyType(
+            Object.prototype.hasOwnProperty.call(record, "propertyType") ? record.propertyType : null,
+          );
+        } else if (key === "possessionStatus") {
+          out.possessionStatus = exportPossession(
+            Object.prototype.hasOwnProperty.call(record, "possessionStatus") ? record.possessionStatus : null,
+          );
         } else if (Object.prototype.hasOwnProperty.call(record, key)) {
           out[key] = record[key];
         } else {
@@ -617,10 +767,19 @@
         showToast("Select at least one property");
         return;
       }
+      if (rows.length > BULK_IMPORT_MAX) {
+        showToast(`Selected ${rows.length} — bulk import max is ${BULK_IMPORT_MAX}. Narrow selection first.`);
+        return;
+      }
+      const f = readFilters();
+      const hidden = filtersActive(f)
+        ? rows.filter((r) => !recordMatchesFilters(r, f)).length
+        : 0;
       const text = formatSelectedJson(rows);
-      const msg = rows.length === 1
+      let msg = rows.length === 1
         ? "Copied 1 property as JSON object"
         : `Copied ${rows.length} properties as JSON array`;
+      if (hidden > 0) msg += ` (${hidden} outside current filters)`;
       await copyText(text, msg);
     }
 
@@ -630,9 +789,18 @@
         showToast("Select at least one property");
         return;
       }
-      const label = rows.length === 1
+      if (rows.length > BULK_IMPORT_MAX) {
+        showToast(`Selected ${rows.length} — bulk import max is ${BULK_IMPORT_MAX}. Narrow selection first.`);
+        return;
+      }
+      const f = readFilters();
+      const hidden = filtersActive(f)
+        ? rows.filter((r) => !recordMatchesFilters(r, f)).length
+        : 0;
+      let label = rows.length === 1
         ? "1 property (JSON object)"
         : `${rows.length} properties (JSON array)`;
+      if (hidden > 0) label += ` · ${hidden} outside filters`;
       document.getElementById("exportTitle").textContent = label;
       document.getElementById("exportJson").textContent = formatSelectedJson(rows);
       document.getElementById("exportModal").classList.add("open");
@@ -821,12 +989,10 @@
         for (const r of state.filtered) state.selected.delete(recordKey(r));
       }
       updateSelCount();
-      renderList();
     });
     document.getElementById("clearSelBtn").addEventListener("click", () => {
       state.selected.clear();
       updateSelCount();
-      renderList();
     });
     document.getElementById("copySelectedBtn").addEventListener("click", copySelectedJson);
     document.getElementById("exportBtn").addEventListener("click", openExportDialog);
@@ -838,9 +1004,12 @@
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") closeExportDialog();
     });
-    for (const id of ["search", "sourceFilter", "typeFilter", "cityFilter", "possessionFilter", "priceFilter", "sortBy"]) {
-      document.getElementById(id).addEventListener("input", applyFilters);
-      document.getElementById(id).addEventListener("change", applyFilters);
+    document.getElementById("search").addEventListener("input", () => {
+      clearTimeout(state.searchTimer);
+      state.searchTimer = setTimeout(() => applyFilters({ resetPage: true }), SEARCH_DEBOUNCE_MS);
+    });
+    for (const id of ["sourceFilter", "typeFilter", "cityFilter", "possessionFilter", "priceFilter", "sortBy"]) {
+      document.getElementById(id).addEventListener("change", () => applyFilters({ resetPage: true }));
     }
     document.getElementById("clearFiltersBtn").addEventListener("click", () => {
       document.getElementById("search").value = "";
@@ -848,8 +1017,20 @@
         document.getElementById(id).value = "";
       }
       document.getElementById("sortBy").value = "project";
-      applyFilters();
+      applyFilters({ resetPage: true });
       showToast("Filters cleared");
+    });
+    document.getElementById("pagePrev").addEventListener("click", () => {
+      if (state.page <= 0) return;
+      state.page -= 1;
+      renderList();
+      window.scrollTo({ top: document.getElementById("toolbar").offsetTop - 12, behavior: "smooth" });
+    });
+    document.getElementById("pageNext").addEventListener("click", () => {
+      if (state.page >= pageCount() - 1) return;
+      state.page += 1;
+      renderList();
+      window.scrollTo({ top: document.getElementById("toolbar").offsetTop - 12, behavior: "smooth" });
     });
     const backTop = document.getElementById("backTop");
     window.addEventListener("scroll", () => {

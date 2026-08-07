@@ -98,6 +98,20 @@ CITY_ALIASES = {
     "gurgaon": "Gurgaon",
 }
 
+TYPE_ALIASES = {
+    "commercial property": "Commercial",
+    "independent floors": "Independent Floor",
+    "sco plots": "SCO",
+    "sco plot": "SCO",
+    "deen dayal plots": "Plot",
+}
+
+POSSESSION_ALIASES = {
+    "upcoming": "NEW_LAUNCH",
+    "new launch": "NEW_LAUNCH",
+    "newlaunch": "NEW_LAUNCH",
+}
+
 AMENITY_JUNK_RE = re.compile(r"^\+\s*\d+\s*more$", re.I)
 
 
@@ -129,6 +143,27 @@ def normalize_city(city: Any) -> Any:
     return mapped or city.strip()
 
 
+def normalize_type(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    mapped = TYPE_ALIASES.get(value.strip().lower())
+    return mapped or value.strip()
+
+
+def normalize_possession(value: Any) -> Any:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return None
+    key = re.sub(r"[\s_-]+", " ", text.lower()).strip()
+    if key in POSSESSION_ALIASES:
+        return POSSESSION_ALIASES[key]
+    return text.upper().replace(" ", "_").replace("-", "_")
+
+
 def coerce_number(value: Any) -> Any:
     if value is None or isinstance(value, (int, float)):
         return value
@@ -148,6 +183,10 @@ def coerce_number(value: Any) -> Any:
 def fix_row(row: dict[str, Any]) -> dict[str, Any]:
     out = dict(row)
     out["city"] = normalize_city(out.get("city"))
+    if "propertyType" in out:
+        out["propertyType"] = normalize_type(out.get("propertyType"))
+    if "possessionStatus" in out:
+        out["possessionStatus"] = normalize_possession(out.get("possessionStatus"))
 
     amenities = out.get("amenities")
     if isinstance(amenities, list):

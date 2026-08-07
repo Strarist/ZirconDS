@@ -17,22 +17,32 @@ PROPERTY_TYPE_MAP = {
     "villas": "Villa",
     "plot": "Plot",
     "plots": "Plot",
+    "deen dayal plots": "Plot",
+    "deen dayal plot": "Plot",
     "penthouse": "Penthouse",
     "studio": "Studio",
     "duplex": "Duplex",
     "independent floor": "Independent Floor",
+    "independent floors": "Independent Floor",
     "floor": "Independent Floor",
     "commercial": "Commercial",
+    "commercial property": "Commercial",
     "office": "Commercial",
     "shop": "Commercial",
+    "sco": "SCO",
+    "sco plot": "SCO",
+    "sco plots": "SCO",
+    "senior living": "Senior Living",
 }
 
 POSSESSION_MAP = {
     "underconstruction": "UNDER_CONSTRUCTION",
     "under_construction": "UNDER_CONSTRUCTION",
     "under construction": "UNDER_CONSTRUCTION",
-    "new launch": "UNDER_CONSTRUCTION",
-    "newlaunch": "UNDER_CONSTRUCTION",
+    "new launch": "NEW_LAUNCH",
+    "newlaunch": "NEW_LAUNCH",
+    "new_launch": "NEW_LAUNCH",
+    "upcoming": "NEW_LAUNCH",
     "ready": "READY_TO_MOVE",
     "ready to move": "READY_TO_MOVE",
     "readytomove": "READY_TO_MOVE",
@@ -215,7 +225,16 @@ def map_possession_status(raw: Optional[str]) -> Optional[str]:
     text = clean_text(raw)
     if not text:
         return None
-    return POSSESSION_MAP.get(text.lower().replace("-", " "), text.upper().replace(" ", "_"))
+    key = text.lower().replace("-", " ").replace("_", " ")
+    key = re.sub(r"\s+", " ", key).strip()
+    mapped = POSSESSION_MAP.get(key)
+    if mapped:
+        return mapped
+    # Also try underscored form used by some portals
+    underscored = text.upper().replace(" ", "_").replace("-", "_")
+    if underscored in {"READY_TO_MOVE", "UNDER_CONSTRUCTION", "NEW_LAUNCH", "UPCOMING"}:
+        return "NEW_LAUNCH" if underscored == "UPCOMING" else underscored
+    return underscored
 
 
 def parse_possession_date(raw: Any) -> Optional[str]:
