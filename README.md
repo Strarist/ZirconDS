@@ -142,8 +142,11 @@ python -m scraper --jsonl output/new.jsonl
 
 **Match key:** `project|city|locality|bhk|superBuiltUpArea`  
 **Loose match** when area is missing on one side → fill nulls carefully.  
+**Soft project match** for near-identical names (typos like Atulayam/Atulyam) when city/locality/BHK/area align — never merges different phases/avenues.  
 **Arrays** (`amenities`, `highlights`, …): union, order preserved, de-duped.  
-**Never** overwrite a concrete price / RERA / area with null.
+**Never** overwrite a concrete price / RERA / area with null.  
+**Self-dedupe:** `python -m scraper --dedupe-only` collapses duplicates already in the archive.  
+**Refresh:** `python -m scraper --refresh --max-projects 20` re-fetches known URLs so newly scraped fields can null-fill into existing rows. Without `--max-projects`, refresh caps at 50 URLs/source.
 
 ## S3 photo upload
 

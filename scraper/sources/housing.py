@@ -18,6 +18,7 @@ from scraper.normalize import (
     is_registered_rera,
     normalize_city,
     parse_area,
+    parse_bathrooms,
     parse_bhk,
     parse_possession_date,
     slugify,
@@ -102,7 +103,7 @@ class HousingAdapter(SourceAdapter):
                 rera_number = clean_rera_number(m.group(1))
 
         configs = (blob or {}).get("inventory_configs") or (blob or {}).get("configs") or []
-        unit_rows: list[tuple[Optional[int], Optional[int], Optional[int]]] = []
+        unit_rows: list[tuple[Optional[int], Optional[int], Optional[int], Optional[int], Optional[int]]] = []
         if isinstance(configs, list):
             for cfg in configs:
                 if not isinstance(cfg, dict):
@@ -113,19 +114,26 @@ class HousingAdapter(SourceAdapter):
                 # match key which is keyed on superBuiltUpArea.
                 carpet = parse_area(cfg.get("carpet_area"))
                 super_area = parse_area(cfg.get("built_up_area") or cfg.get("super_built_up_area"))
+                bathrooms = parse_bathrooms(
+                    cfg.get("bathroom")
+                    or cfg.get("bathrooms")
+                    or cfg.get("number_of_bathrooms")
+                    or cfg.get("washroom")
+                    or cfg.get("washrooms")
+                )
                 price = cfg.get("price")
                 try:
                     price_i = int(float(price)) if price is not None else None
                 except (TypeError, ValueError):
                     price_i = None
-                unit_rows.append((bhk, carpet, super_area, price_i))
+                unit_rows.append((bhk, carpet, super_area, price_i, bathrooms))
         if not unit_rows:
-            unit_rows = [(None, None, None, None)]
+            unit_rows = [(None, None, None, None, None)]
 
         slug_base = slugify(urlparse(url).path.strip("/") or project_name)
         records: list[dict[str, Any]] = []
         used: set[str] = set()
-        for bhk, carpet, super_area, price in unit_rows:
+        for bhk, carpet, super_area, price, bathrooms in unit_rows:
             area_for_slug = super_area if super_area is not None else carpet
             slug = slug_base
             if bhk:
@@ -152,6 +160,7 @@ class HousingAdapter(SourceAdapter):
                     "locality": locality,
                     "address": ", ".join(x for x in (locality, city) if x) or None,
                     "bhk": bhk,
+                    "bathrooms": bathrooms,
                     "carpetArea": carpet,
                     "superBuiltUpArea": super_area,  # None when only carpet is known
                     "price": price,

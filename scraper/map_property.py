@@ -23,6 +23,7 @@ from scraper.normalize import (
     map_property_type,
     normalize_city,
     parse_area,
+    parse_bathrooms,
     parse_bhk,
     parse_possession_date,
     price_to_inr,
@@ -263,6 +264,20 @@ def map_unit_records(
     for row in bhk_rows:
         bhk = parse_bhk(row.get("bhk_type"))
         area = parse_area(row.get("bhk_Area") or row.get("bhk_area") or row.get("area"))
+        bathrooms = parse_bathrooms(
+            row.get("bathroom")
+            or row.get("bathrooms")
+            or row.get("bath")
+            or row.get("Bath")
+            or row.get("washroom")
+            or row.get("washrooms")
+        )
+        carpet = parse_area(
+            row.get("carpet_Area")
+            or row.get("carpet_area")
+            or row.get("carpetArea")
+            or row.get("Carpet_Area")
+        )
         # Unit price only — never invent from project minPrice (would duplicate across BHKs)
         unit_price = price_to_inr(row.get("price"), row.get("priceUnit") or row.get("price_unit"))
         image_urls = collect_project_image_urls(project, row)
@@ -325,8 +340,8 @@ def map_unit_records(
             "exclusive": None,
             "vastuCompliant": None,
             "bhk": bhk,
-            "bathrooms": None,
-            "carpetArea": None,
+            "bathrooms": bathrooms,
+            "carpetArea": carpet,
             "builtUpArea": None,
             "superBuiltUpArea": area,
             "propertyAge": None,

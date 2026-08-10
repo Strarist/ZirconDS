@@ -363,6 +363,28 @@ def parse_area(raw: Any) -> Optional[int]:
         return None
 
 
+def parse_bathrooms(raw: Any) -> Optional[int]:
+    """Parse bathroom / washroom count. Returns None when missing or non-positive."""
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        n = int(round(float(raw)))
+        return n if n > 0 else None
+    text = str(raw).strip()
+    if not text:
+        return None
+    match = re.search(r"(\d+(?:\.\d+)?)", text)
+    if not match:
+        return None
+    try:
+        n = int(round(float(match.group(1))))
+    except ValueError:
+        return None
+    return n if n > 0 else None
+
+
 def sanitize_coords(
     lat: Optional[float],
     lng: Optional[float],

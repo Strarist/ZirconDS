@@ -20,6 +20,7 @@ from scraper.normalize import (
     map_possession_status,
     normalize_city,
     parse_area,
+    parse_bathrooms,
     parse_bhk,
     parse_possession_date,
     price_to_inr,
@@ -101,11 +102,13 @@ def _string_after_key(html: str, key: str) -> Optional[str]:
         return clean_text(m.group(1))
 
 
-def extract_unit_rows(html: str) -> list[tuple[Optional[int], Optional[int], Optional[int], Optional[int]]]:
-    """Return (bhk, carpet, super, price) rows from floorPlans JSON."""
+def extract_unit_rows(
+    html: str,
+) -> list[tuple[Optional[int], Optional[int], Optional[int], Optional[int], Optional[int]]]:
+    """Return (bhk, carpet, super, price, bathrooms) rows from floorPlans JSON."""
     plans = _value_after_key(html, "floorPlans")
-    rows: list[tuple[Optional[int], Optional[int], Optional[int], Optional[int]]] = []
-    seen: set[tuple[Optional[int], Optional[int], Optional[int]]] = set()
+    rows: list[tuple[Optional[int], Optional[int], Optional[int], Optional[int], Optional[int]]] = []
+    seen: set[tuple[Optional[int], Optional[int], Optional[int], Optional[int]]] = set()
     configs: list[Any] = []
     if isinstance(plans, dict):
         data = plans.get("data") or {}
@@ -118,6 +121,12 @@ def extract_unit_rows(html: str) -> list[tuple[Optional[int], Optional[int], Opt
         if not isinstance(cfg, dict):
             continue
         bhk = parse_bhk(cfg.get("bedroom") or cfg.get("label") or cfg.get("configLabel"))
+        cfg_baths = parse_bathrooms(
+            cfg.get("bathroom")
+            or cfg.get("bathrooms")
+            or cfg.get("washroom")
+            or cfg.get("washrooms")
+        )
         for tup in cfg.get("tuples") or []:
             if not isinstance(tup, dict):
                 continue
@@ -132,7 +141,7 @@ def extract_unit_rows(html: str) -> list[tuple[Optional[int], Optional[int], Opt
                 aid = str(area_type.get("id") or "").upper()
                 if aid == "CARPET":
                     carpet = parsed
-                elif aid in {"SUPER", "SUPER_BUILTUP", "SBA"}:
+                elif aid in {"SUPER", "SUPER_BUILTUP", "SBA", "BUILTUP", "BUILT_UP"}:
                     super_area = parsed
             price = None
             price_obj = tup.get("price") or tup.get("minPrice")
@@ -143,11 +152,18 @@ def extract_unit_rows(html: str) -> list[tuple[Optional[int], Optional[int], Opt
                     price = int(float(price_obj))
                 except (TypeError, ValueError):
                     price = price_to_inr(str(price_obj))
-            key = (bhk, carpet, super_area)
+            bathrooms = parse_bathrooms(
+                tup.get("bathroom")
+                or tup.get("bathrooms")
+                or tup.get("washroom")
+                or tup.get("washrooms")
+                or cfg_baths
+            )
+            key = (bhk, carpet, super_area, bathrooms)
             if key in seen:
                 continue
             seen.add(key)
-            rows.append((bhk, carpet, super_area, price))
+            rows.append((bhk, carpet, super_area, price, bathrooms))
     return rows
 
 
@@ -288,7 +304,7 @@ class Acres99Adapter(SourceAdapter):
 
         unit_rows = extract_unit_rows(html)
         if not unit_rows:
-            unit_rows = [(None, None, None, None)]
+            unit_rows = [(None, None, None, None, None)]
 
         amenities_raw: list[str] = []
         for m in re.finditer(r'"amenit(?:y|ies)Name"\s*:\s*"([^"]+)"', html, re.I):
@@ -302,13 +318,14 @@ class Acres99Adapter(SourceAdapter):
         slug_base = slugify(urlparse(url).path.strip("/") or project_name)
         records: list[dict[str, Any]] = []
         used: set[str] = set()
-        for bhk, carpet, super_area, price in unit_rows:
-            area = super_area if super_area is not None else carpet
+        for bhk, carpet, super_area, price, bathrooms in unit_rows:
+            # Keep carpet out of superBuiltUpArea — match key is keyed on SBA only.
+            area_for_slug = super_area if super_area is not None else carpet
             slug = slug_base
             if bhk:
                 slug = f"{slug_base}-{bhk}bhk"
-            if area:
-                slug = f"{slug}-{area}sqft"
+            if area_for_slug:
+                slug = f"{slug}-{area_for_slug}sqft"
             candidate = slug
             n = 2
             while candidate in used:
@@ -330,8 +347,9 @@ class Acres99Adapter(SourceAdapter):
                     "locality": locality,
                     "address": ", ".join(x for x in (locality, city) if x) or None,
                     "bhk": bhk,
+                    "bathrooms": bathrooms,
                     "carpetArea": carpet,
-                    "superBuiltUpArea": area,
+                    "superBuiltUpArea": super_area,  # None when only carpet is known
                     "possessionStatus": possession_status,
                     "possessionDate": possession_date,
                     "price": price if price is not None else unit_price,

@@ -20,6 +20,7 @@ from scraper.sources.magicbricks import MagicBricksAdapter
 from scraper.sources.squareyards import SquareYardsAdapter
 from scraper.store import (
     backfill_source_meta,
+    dedupe_archive,
     filter_new_urls,
     known_source_urls,
     latest_path_for,
@@ -42,6 +43,8 @@ ADAPTERS: dict[str, type] = {
 }
 
 DEFAULT_SITES = ",".join(ADAPTERS.keys())
+# Safety cap when --refresh is used without --max-projects (avoids re-fetching the whole web).
+REFRESH_DEFAULT_CAP = 50
 
 
 def default_sites_csv() -> str:
@@ -53,6 +56,25 @@ def write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as fh:
         for record in records:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _unique_latest(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Preserve order while dropping duplicate match keys from latest.json."""
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for rec in records:
+        key = match_key(rec) or json.dumps(rec.get("slug") or id(rec), default=str)
+        if key in seen:
+            # Prefer the later (usually more enriched) copy
+            for i, existing in enumerate(out):
+                existing_key = match_key(existing) or json.dumps(existing.get("slug") or id(existing), default=str)
+                if existing_key == key:
+                    out[i] = rec
+                    break
+            continue
+        seen.add(key)
+        out.append(rec)
+    return out
 
 
 def append_error(path: Path, url: str, error: str, run_id: str = "") -> None:
@@ -121,6 +143,16 @@ def build_parser() -> argparse.ArgumentParser:
         default="output/errors.jsonl",
         help="Append-only error log path",
     )
+    parser.add_argument(
+        "--dedupe-only",
+        action="store_true",
+        help="Collapse duplicate units already in the archive (no network scrape)",
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Re-fetch already-archived project URLs so new fields can null-fill merge",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser
 
@@ -135,19 +167,55 @@ def main(argv: list[str] | None = None) -> int:
     run_id = str(uuid.uuid4())[:8]  # short 8-char prefix is enough for log correlation
     logger.info("Run ID: %s", run_id)
 
-    sites = parse_sites(args.sites)
-    errors_path = Path(args.errors)
-    # errors.jsonl is append-only across runs; each line carries a timestamp + runId.
-    # Do NOT delete it here — history is preserved intentionally.
-
     out_path = Path(args.out)
     latest_path = latest_path_for(out_path)
     stats_path = run_stats_path_for(out_path)
     archive = load_records(out_path)
     backfill_source_meta(archive)
-    known = known_source_urls(archive)
     logger.info("Loaded archive with %s record(s) from %s", len(archive), out_path)
 
+    if args.dedupe_only:
+        before = len(archive)
+        merged, collapsed, updated = dedupe_archive(archive)
+        write_records(out_path, merged)
+        write_records(latest_path, updated)
+        stats = {
+            "sites": [],
+            "discovered": 0,
+            "skippedKnown": 0,
+            "skippedNonProject": 0,
+            "scraped": 0,
+            "failed": 0,
+            "added": 0,
+            "updated": len(updated),
+            "collapsed": collapsed,
+            "runId": run_id,
+            "message": (
+                f"Dedupe-only: {before} -> {len(merged)} "
+                f"({collapsed} merges, {len(updated)} enriched)"
+            ),
+            "perSite": {},
+        }
+        keys = [match_key(r) for r in merged]
+        key_counts: dict[str, int] = {}
+        for k in keys:
+            if not k:
+                continue
+            key_counts[k] = key_counts.get(k, 0) + 1
+        stats["duplicateMatchKeys"] = sum(1 for v in key_counts.values() if v > 1)
+        stats_path.parent.mkdir(parents=True, exist_ok=True)
+        stats_path.write_text(json.dumps(stats, indent=2) + "\n", encoding="utf-8")
+        logger.info(stats["message"])
+        if stats["duplicateMatchKeys"]:
+            logger.warning("Archive still has %s duplicate match-key group(s)", stats["duplicateMatchKeys"])
+        return 0
+
+    sites = parse_sites(args.sites)
+    errors_path = Path(args.errors)
+    # errors.jsonl is append-only across runs; each line carries a timestamp + runId.
+    # Do NOT delete it here — history is preserved intentionally.
+
+    known = known_source_urls(archive)
     stats: dict[str, Any] = {
         "sites": sites,
         "discovered": 0,
@@ -157,6 +225,7 @@ def main(argv: list[str] | None = None) -> int:
         "failed": 0,
         "added": 0,
         "updated": 0,
+        "collapsed": 0,
         "message": "",
         "perSite": {},
     }
@@ -194,22 +263,34 @@ def main(argv: list[str] | None = None) -> int:
             stats["discovered"] += len(urls)
             if len(urls) == 0:
                 site_stats["blocked"] = True
-            urls = filter_new_urls(urls, known)
-            skipped = site_stats["discovered"] - len(urls)
+            if args.refresh:
+                skipped = 0
+                logger.info("[%s] --refresh: re-fetching known URLs for enrichment merge", site)
+            else:
+                urls = filter_new_urls(urls, known)
+                skipped = site_stats["discovered"] - len(urls)
             site_stats["skippedKnown"] = skipped
             stats["skippedKnown"] += skipped
             if skipped:
                 logger.info("[%s] Skipping %s already-archived URL(s)", site, skipped)
 
             new_candidates = len(urls)
-            if args.max_projects is not None:
-                urls = urls[: args.max_projects]
+            refresh_cap = args.max_projects
+            if args.refresh and refresh_cap is None:
+                refresh_cap = REFRESH_DEFAULT_CAP
+                logger.warning(
+                    "[%s] --refresh without --max-projects; capping to %s URLs (pass --max-projects to override)",
+                    site,
+                    refresh_cap,
+                )
+            if refresh_cap is not None:
+                urls = urls[:refresh_cap]
             if new_candidates and not urls:
                 logger.info(
-                    "[%s] %s new URL(s) found but --max-projects=%s capped scrape to 0",
+                    "[%s] %s URL(s) found but cap=%s reduced scrape to 0",
                     site,
                     new_candidates,
-                    args.max_projects,
+                    refresh_cap,
                 )
 
             if not urls:
@@ -217,7 +298,7 @@ def main(argv: list[str] | None = None) -> int:
                 stats["perSite"][site] = site_stats
                 continue
 
-            logger.info("[%s] Scraping %s new project(s)", site, len(urls))
+            logger.info("[%s] Scraping %s project(s)", site, len(urls))
             for i, url in enumerate(urls, start=1):
                 logger.info("[%s %s/%s] %s", site, i, len(urls), url)
                 try:
@@ -273,13 +354,35 @@ def main(argv: list[str] | None = None) -> int:
         stamp_scraped_at(batch)
 
     merged, added, updated = merge_archive(archive, batch)
+
+    # Fast sanity: collapse leftover exact/soft duplicates when any remain.
+    keys_probe = [match_key(r) for r in merged if match_key(r)]
+    key_counts_probe: dict[str, int] = {}
+    for k in keys_probe:
+        key_counts_probe[k] = key_counts_probe.get(k, 0) + 1
+    needs_dedupe = any(v > 1 for v in key_counts_probe.values())
+
+    collapsed = 0
+    if needs_dedupe:
+        before_dedupe = len(merged)
+        merged, collapsed, dedupe_updated = dedupe_archive(merged)
+        if collapsed:
+            logger.info(
+                "Collapsed %s duplicate unit(s) in archive (%s -> %s)",
+                collapsed,
+                before_dedupe,
+                len(merged),
+            )
+            updated = updated + dedupe_updated
+
     write_records(out_path, merged)
-    # Latest = newly added + updated enrichments
-    latest = added + updated
+    # Latest = newly added + updated enrichments (dedupe identical row objects by match key)
+    latest = _unique_latest(added + updated)
     write_records(latest_path, latest)
 
     stats["added"] = len(added)
     stats["updated"] = len(updated)
+    stats["collapsed"] = collapsed
     stats["runId"] = run_id
     # Sanity: duplicate match keys in archive
     keys = [match_key(r) for r in merged]
@@ -293,7 +396,7 @@ def main(argv: list[str] | None = None) -> int:
     if dup_keys:
         logger.warning("Archive has %s duplicate match-key group(s)", dup_keys)
 
-    if len(added) == 0 and len(updated) == 0:
+    if len(added) == 0 and len(updated) == 0 and collapsed == 0:
         detail_parts = [
             f"{stats['skippedKnown']} known skipped",
             f"{stats['discovered']} discovered",
@@ -307,7 +410,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     else:
         stats["message"] = (
-            f"Added {len(added)}, updated {len(updated)} "
+            f"Added {len(added)}, updated {len(updated)}, collapsed {collapsed} "
             f"(discovered {stats['discovered']}, skipped {stats['skippedKnown']}, "
             f"scraped {stats['scraped']})"
         )
@@ -316,10 +419,11 @@ def main(argv: list[str] | None = None) -> int:
 
     logger.info(stats["message"])
     logger.info(
-        "Archive now %s record(s) (+%s new, ~%s updated) -> %s; latest -> %s",
+        "Archive now %s record(s) (+%s new, ~%s updated, -%s dups) -> %s; latest -> %s",
         len(merged),
         len(added),
         len(updated),
+        collapsed,
         out_path,
         latest_path,
     )
